@@ -7,6 +7,7 @@ import (
 	"github.com/IQNeoXen/aictx/internal/config"
 	"github.com/IQNeoXen/aictx/internal/picker"
 	"github.com/IQNeoXen/aictx/internal/target"
+	"github.com/IQNeoXen/aictx/internal/target/claudecli"
 	"github.com/spf13/cobra"
 )
 
@@ -101,6 +102,7 @@ func switchContext(cfg *config.Config, name string) error {
 
 	// Only apply to targets listed in this context
 	applied := 0
+	newAppliedEnvKeys := map[string][]string{}
 	for _, te := range ctx.Targets {
 		t := target.ByID(te.ID)
 		if t == nil {
@@ -111,12 +113,30 @@ func switchContext(cfg *config.Config, name string) error {
 			fmt.Fprintf(os.Stderr, "  - %s: not installed\n", t.Name())
 			continue
 		}
+
+		// For claudecli, inject the previously-applied env keys so Apply()
+		// can remove stale entries before writing new ones.
+		if ct, ok := t.(*claudecli.Target); ok {
+			if cfg.State.AppliedEnvKeys != nil {
+				ct.PrevEnvKeys = cfg.State.AppliedEnvKeys[te.ID]
+			}
+		}
+
 		if err := t.Apply(te); err != nil {
 			fmt.Fprintf(os.Stderr, "  ! %s: %v\n", t.Name(), err)
 			continue
 		}
 		applied++
 		fmt.Printf("  ✓ %s\n", t.Name())
+
+		// Track which env keys were applied for this target so the next
+		// switch can clean them up.
+		if te.ID == claudecli.ID {
+			keys := claudecliAppliedEnvKeys(te)
+			if len(keys) > 0 {
+				newAppliedEnvKeys[te.ID] = keys
+			}
+		}
 	}
 
 	if applied == 0 {
@@ -125,10 +145,41 @@ func switchContext(cfg *config.Config, name string) error {
 
 	cfg.State.Previous = cfg.State.Current
 	cfg.State.Current = name
+	if cfg.State.AppliedEnvKeys == nil {
+		cfg.State.AppliedEnvKeys = map[string][]string{}
+	}
+	for k, v := range newAppliedEnvKeys {
+		cfg.State.AppliedEnvKeys[k] = v
+	}
 	if err := config.Save(cfg); err != nil {
 		return err
 	}
 
 	fmt.Printf("Switched to \033[1m%s\033[0m\n", name)
 	return nil
+}
+
+// claudecliAppliedEnvKeys returns the set of env keys that Apply() will write
+// for the given TargetEntry when targeting claudecli. Used to track stale keys.
+func claudecliAppliedEnvKeys(te config.TargetEntry) []string {
+	var keys []string
+	if te.Provider.Endpoint != "" {
+		keys = append(keys, "ANTHROPIC_BASE_URL")
+	}
+	if te.Provider.APIKey != "" {
+		keys = append(keys, "ANTHROPIC_AUTH_TOKEN")
+	}
+	if te.Provider.Model != "" {
+		keys = append(keys, "ANTHROPIC_MODEL")
+	}
+	if te.Provider.SmallModel != "" {
+		keys = append(keys, "ANTHROPIC_DEFAULT_HAIKU_MODEL")
+	}
+	if te.Options.DisableTelemetry != nil && *te.Options.DisableTelemetry {
+		keys = append(keys, "DISABLE_TELEMETRY")
+	}
+	if te.Options.DisableBetas != nil && *te.Options.DisableBetas {
+		keys = append(keys, "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS")
+	}
+	return keys
 }

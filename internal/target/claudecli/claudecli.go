@@ -5,13 +5,22 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 
 	"github.com/IQNeoXen/aictx/internal/config"
 )
 
 const ID = "claude-code-cli"
 
-type Target struct{}
+var trailingCommaRe = regexp.MustCompile(`,(\s*[\]}])`)
+
+// Target implements the claudecli target.
+// PrevEnvKeys holds the env keys written by the previous switch for this
+// target so that Apply() can remove stale entries before writing new ones.
+// Populate this field before calling Apply().
+type Target struct {
+	PrevEnvKeys []string
+}
 
 func New() *Target { return &Target{} }
 
@@ -43,42 +52,78 @@ func (t *Target) Detect() bool {
 }
 
 func (t *Target) Apply(te config.TargetEntry) error {
-	env := make(map[string]string)
+	// --- 1. Read existing settings (read-modify-write) ---
+	settings := map[string]interface{}{}
 
+	path := t.settingsPath()
+	if raw, err := os.ReadFile(path); err == nil {
+		// Strip trailing commas before parsing (VSCode-style JSON may have them)
+		cleaned := trailingCommaRe.ReplaceAll(raw, []byte("$1"))
+		if jsonErr := json.Unmarshal(cleaned, &settings); jsonErr != nil {
+			// If parsing fails, fall back to an empty map to avoid clobbering
+			// a partially-corrupt file with our own error handling; we still
+			// write out a clean merged result.
+			settings = map[string]interface{}{}
+		}
+	}
+	// If the file doesn't exist yet, settings stays empty — that's fine.
+
+	// --- 2. Obtain the existing env sub-map ---
+	existingEnv, _ := settings["env"].(map[string]interface{})
+	if existingEnv == nil {
+		existingEnv = map[string]interface{}{}
+	}
+
+	// --- 3. Remove keys that were written by the previous switch ---
+	for _, k := range t.PrevEnvKeys {
+		delete(existingEnv, k)
+	}
+
+	// --- 4. Build the new env entries from the TargetEntry ---
+	newEnv := map[string]string{}
 	if te.Provider.Endpoint != "" {
-		env["ANTHROPIC_BASE_URL"] = te.Provider.Endpoint
+		newEnv["ANTHROPIC_BASE_URL"] = te.Provider.Endpoint
 	}
 	if te.Provider.APIKey != "" {
-		env["ANTHROPIC_AUTH_TOKEN"] = te.Provider.APIKey
+		newEnv["ANTHROPIC_AUTH_TOKEN"] = te.Provider.APIKey
 	}
 	if te.Provider.Model != "" {
-		env["ANTHROPIC_MODEL"] = te.Provider.Model
+		newEnv["ANTHROPIC_MODEL"] = te.Provider.Model
 	}
 	if te.Provider.SmallModel != "" {
-		env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = te.Provider.SmallModel
+		newEnv["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = te.Provider.SmallModel
 	}
 	if te.Options.DisableTelemetry != nil && *te.Options.DisableTelemetry {
-		env["DISABLE_TELEMETRY"] = "1"
+		newEnv["DISABLE_TELEMETRY"] = "1"
 	}
 	if te.Options.DisableBetas != nil && *te.Options.DisableBetas {
-		env["CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS"] = "1"
+		newEnv["CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS"] = "1"
 	}
 
-	settings := map[string]interface{}{}
-	if len(env) > 0 {
-		settings["env"] = env
+	// Merge new keys into the existing env map
+	for k, v := range newEnv {
+		existingEnv[k] = v
 	}
+
+	// --- 5. Write env back (or remove the key if nothing remains) ---
+	if len(existingEnv) > 0 {
+		settings["env"] = existingEnv
+	} else {
+		delete(settings, "env")
+	}
+
+	// --- 6. Handle alwaysThinkingEnabled ---
 	if te.Options.AlwaysThinking != nil {
 		settings["alwaysThinkingEnabled"] = *te.Options.AlwaysThinking
 	}
 
+	// --- 7. Marshal and atomic-write ---
 	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshaling claude settings: %w", err)
 	}
 	data = append(data, '\n')
 
-	path := t.settingsPath()
 	tmp := path + ".aictx-tmp"
 	if err := os.WriteFile(tmp, data, 0644); err != nil {
 		return fmt.Errorf("writing claude settings: %w", err)

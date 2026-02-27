@@ -62,8 +62,9 @@ func (c *Context) TargetIDs() []string {
 
 // State tracks which context is active.
 type State struct {
-	Current  string `yaml:"current"`
-	Previous string `yaml:"previous,omitempty"`
+	Current         string              `yaml:"current"`
+	Previous        string              `yaml:"previous,omitempty"`
+	AppliedEnvKeys  map[string][]string `yaml:"appliedEnvKeys,omitempty"`
 }
 
 // Config is the top-level aictx configuration.
