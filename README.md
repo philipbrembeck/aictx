@@ -4,6 +4,17 @@ A context switcher for AI tools. Inspired by [kubectx](https://github.com/ahmetb
 
 Switch between API keys, endpoints, models and other settings across multiple AI tools with a single command.
 
+## Supported Targets
+
+- [x] Claude Code CLI
+- [x] Claude Code for VSCode
+- [ ] Roo Code for VSCode
+- [ ] Cline for VSCode
+- [ ] GitHub Copilot CLI
+- [ ] GitHub Copilot for VSCode
+
+Each target translates abstract provider settings into its own config format. PRs welcome!
+
 ## Install
 
 ```bash
@@ -51,15 +62,6 @@ aictx
 | `aictx show [name]` | Show context details (defaults to current)               |
 | `aictx current`     | Print the current context name                           |
 | `aictx discover`    | Detect config from installed tools and save as a context |
-
-## Supported Targets
-
-| Target                 | ID                   | Config File                                             |
-| ---------------------- | -------------------- | ------------------------------------------------------- |
-| Claude Code CLI        | `claude-code-cli`    | `~/.claude/settings.json`                               |
-| Claude Code for VSCode | `claude-code-vscode` | `~/Library/Application Support/Code/User/settings.json` |
-
-Each target translates abstract provider settings into its own config format.
 
 ## Config
 
@@ -122,7 +124,7 @@ aictx add work-project \
 
 **Interactively** (just run `aictx add mycontext` without flags):
 
-```
+```txt
 Description: Work proxy config
 Available targets:
   [1] Claude Code CLI (claude-code-cli) (detected)
