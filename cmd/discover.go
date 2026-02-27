@@ -61,6 +61,8 @@ func discoverRun(cmd *cobra.Command, args []string) error {
 
 	// Print discovered config as YAML (mask secrets in preview)
 	preview := *result
+	preview.Targets = make([]config.TargetEntry, len(result.Targets))
+	copy(preview.Targets, result.Targets)
 	for i := range preview.Targets {
 		if preview.Targets[i].Provider.APIKey != "" {
 			preview.Targets[i].Provider.APIKey = maskValue(preview.Targets[i].Provider.APIKey)

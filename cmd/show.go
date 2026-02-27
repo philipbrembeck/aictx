@@ -44,6 +44,8 @@ func showRun(cmd *cobra.Command, args []string) error {
 	// Print as YAML, masking secrets unless --reveal
 	display := *ctx
 	if !showReveal {
+		display.Targets = make([]config.TargetEntry, len(ctx.Targets))
+		copy(display.Targets, ctx.Targets)
 		for i := range display.Targets {
 			if display.Targets[i].Provider.APIKey != "" {
 				display.Targets[i].Provider.APIKey = maskValue(display.Targets[i].Provider.APIKey)
