@@ -12,15 +12,15 @@ import (
 )
 
 var (
-	addTargets    []string
-	addDesc       string
-	addEndpoint   string
-	addAPIKey     string
-	addModel      string
-	addSmallModel string
-	addThinking   bool
+	addTargets     []string
+	addDesc        string
+	addEndpoint    string
+	addAPIKey      string
+	addModel       string
+	addSmallModel  string
+	addThinking    bool
 	addNoTelemetry bool
-	addNoBetas    bool
+	addNoBetas     bool
 )
 
 var addCmd = &cobra.Command{
@@ -56,36 +56,43 @@ func addRun(cmd *cobra.Command, args []string) error {
 
 	ctx := config.Context{Name: name}
 
-	// Check if any flags were provided for non-interactive mode
 	flagsProvided := len(addTargets) > 0 || addDesc != "" || addEndpoint != "" ||
 		addAPIKey != "" || addModel != "" || addSmallModel != "" ||
 		addThinking || addNoTelemetry || addNoBetas
 
 	if flagsProvided {
 		ctx.Description = addDesc
-		ctx.Provider.Endpoint = addEndpoint
-		ctx.Provider.APIKey = addAPIKey
-		ctx.Provider.Model = addModel
-		ctx.Provider.SmallModel = addSmallModel
 
+		// Build provider and options from flags (same for all targets in flag mode)
+		prov := config.Provider{
+			Endpoint:   addEndpoint,
+			APIKey:     addAPIKey,
+			Model:      addModel,
+			SmallModel: addSmallModel,
+		}
+		var opts config.Options
 		if addThinking {
-			t := true
-			ctx.Options.AlwaysThinking = &t
+			b := true
+			opts.AlwaysThinking = &b
 		}
 		if addNoTelemetry {
-			t := true
-			ctx.Options.DisableTelemetry = &t
+			b := true
+			opts.DisableTelemetry = &b
 		}
 		if addNoBetas {
-			t := true
-			ctx.Options.DisableBetas = &t
+			b := true
+			opts.DisableBetas = &b
 		}
 
 		for _, tid := range addTargets {
 			if target.ByID(tid) == nil {
 				return fmt.Errorf("unknown target %q. Available: %v", tid, target.IDs())
 			}
-			ctx.Targets = append(ctx.Targets, config.TargetEntry{ID: tid})
+			ctx.Targets = append(ctx.Targets, config.TargetEntry{
+				ID:       tid,
+				Provider: prov,
+				Options:  opts,
+			})
 		}
 	} else {
 		// Interactive mode
@@ -104,9 +111,10 @@ func addRun(cmd *cobra.Command, args []string) error {
 			fmt.Printf("  [%d] %s (%s)%s\n", i+1, t.Name(), t.ID(), detected)
 		}
 		fmt.Print("Select targets (comma-separated numbers, e.g. 1,2): ")
+
+		var selectedTargets []target.Target
 		if scanner.Scan() {
-			parts := strings.Split(scanner.Text(), ",")
-			for _, p := range parts {
+			for _, p := range strings.Split(scanner.Text(), ",") {
 				p = strings.TrimSpace(p)
 				if p == "" {
 					continue
@@ -114,56 +122,41 @@ func addRun(cmd *cobra.Command, args []string) error {
 				idx := 0
 				fmt.Sscanf(p, "%d", &idx)
 				if idx >= 1 && idx <= len(allTargets) {
-					ctx.Targets = append(ctx.Targets, config.TargetEntry{ID: allTargets[idx-1].ID()})
+					selectedTargets = append(selectedTargets, allTargets[idx-1])
 				}
 			}
 		}
-		if len(ctx.Targets) == 0 {
+		if len(selectedTargets) == 0 {
 			return fmt.Errorf("no targets selected")
 		}
 
-		// Provider
-		fmt.Println("\nProvider settings (leave empty for native auth / OAuth):")
-		ctx.Provider.Endpoint = prompt(scanner, "Endpoint URL")
-		ctx.Provider.APIKey = prompt(scanner, "API Key")
-		ctx.Provider.Model = prompt(scanner, "Model (e.g. claude-opus-4.6)")
-		ctx.Provider.SmallModel = prompt(scanner, "Small model (e.g. claude-haiku-4.5)")
+		// Configure each target
+		for _, t := range selectedTargets {
+			fmt.Printf("\n--- %s (%s) ---\n", t.Name(), t.ID())
 
-		// Headers
-		fmt.Println("\nCustom headers (empty line to finish):")
-		for {
-			fmt.Print("  Header (key: value): ")
-			if !scanner.Scan() {
-				break
-			}
-			line := strings.TrimSpace(scanner.Text())
-			if line == "" {
-				break
-			}
-			parts := strings.SplitN(line, ":", 2)
-			if len(parts) != 2 {
-				fmt.Fprintln(os.Stderr, "  Invalid format, use key: value")
-				continue
-			}
-			if ctx.Provider.Headers == nil {
-				ctx.Provider.Headers = make(map[string]string)
-			}
-			ctx.Provider.Headers[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
-		}
+			te := config.TargetEntry{ID: t.ID()}
 
-		// Options
-		fmt.Println("\nOptions:")
-		if yesNo(scanner, "Always thinking?", true) {
-			t := true
-			ctx.Options.AlwaysThinking = &t
-		}
-		if yesNo(scanner, "Disable telemetry?", true) {
-			t := true
-			ctx.Options.DisableTelemetry = &t
-		}
-		if yesNo(scanner, "Disable experimental betas?", false) {
-			t := true
-			ctx.Options.DisableBetas = &t
+			fmt.Println("Provider (leave empty for native auth / OAuth):")
+			te.Provider.Endpoint = prompt(scanner, "  Endpoint URL")
+			te.Provider.APIKey = prompt(scanner, "  API Key")
+			te.Provider.Model = prompt(scanner, "  Model (e.g. claude-opus-4.6)")
+			te.Provider.SmallModel = prompt(scanner, "  Small model (e.g. claude-haiku-4.5)")
+
+			fmt.Println("Options:")
+			if yesNo(scanner, "  Always thinking?", true) {
+				b := true
+				te.Options.AlwaysThinking = &b
+			}
+			if yesNo(scanner, "  Disable telemetry?", true) {
+				b := true
+				te.Options.DisableTelemetry = &b
+			}
+			if yesNo(scanner, "  Disable experimental betas?", false) {
+				b := true
+				te.Options.DisableBetas = &b
+			}
+
+			ctx.Targets = append(ctx.Targets, te)
 		}
 	}
 
@@ -177,7 +170,7 @@ func addRun(cmd *cobra.Command, args []string) error {
 }
 
 func prompt(scanner *bufio.Scanner, label string) string {
-	fmt.Printf("  %s: ", label)
+	fmt.Printf("%s: ", label)
 	if scanner.Scan() {
 		return strings.TrimSpace(scanner.Text())
 	}
@@ -189,7 +182,7 @@ func yesNo(scanner *bufio.Scanner, question string, defaultYes bool) bool {
 	if !defaultYes {
 		hint = "y/N"
 	}
-	fmt.Printf("  %s (%s): ", question, hint)
+	fmt.Printf("%s (%s): ", question, hint)
 	if scanner.Scan() {
 		answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
 		if answer == "" {

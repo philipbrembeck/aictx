@@ -11,7 +11,6 @@ import (
 
 const ID = "claude-code-cli"
 
-// Target implements the Claude Code CLI target.
 type Target struct{}
 
 func New() *Target { return &Target{} }
@@ -29,40 +28,34 @@ func (t *Target) Detect() bool {
 	return err == nil
 }
 
-func (t *Target) Apply(ctx config.Context) error {
-	prov := ctx.EffectiveProvider(ID)
-
+func (t *Target) Apply(te config.TargetEntry) error {
 	env := make(map[string]string)
 
-	// Translate abstract provider → Claude Code env vars
-	if prov.Endpoint != "" {
-		env["ANTHROPIC_BASE_URL"] = prov.Endpoint
+	if te.Provider.Endpoint != "" {
+		env["ANTHROPIC_BASE_URL"] = te.Provider.Endpoint
 	}
-	if prov.APIKey != "" {
-		env["ANTHROPIC_AUTH_TOKEN"] = prov.APIKey
+	if te.Provider.APIKey != "" {
+		env["ANTHROPIC_AUTH_TOKEN"] = te.Provider.APIKey
 	}
-	if prov.Model != "" {
-		env["ANTHROPIC_MODEL"] = prov.Model
+	if te.Provider.Model != "" {
+		env["ANTHROPIC_MODEL"] = te.Provider.Model
 	}
-	if prov.SmallModel != "" {
-		env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = prov.SmallModel
+	if te.Provider.SmallModel != "" {
+		env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = te.Provider.SmallModel
 	}
-
-	// Translate options → env vars
-	if ctx.Options.DisableTelemetry != nil && *ctx.Options.DisableTelemetry {
+	if te.Options.DisableTelemetry != nil && *te.Options.DisableTelemetry {
 		env["DISABLE_TELEMETRY"] = "1"
 	}
-	if ctx.Options.DisableBetas != nil && *ctx.Options.DisableBetas {
+	if te.Options.DisableBetas != nil && *te.Options.DisableBetas {
 		env["CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS"] = "1"
 	}
 
-	// Build settings object
 	settings := map[string]interface{}{}
 	if len(env) > 0 {
 		settings["env"] = env
 	}
-	if ctx.Options.AlwaysThinking != nil {
-		settings["alwaysThinkingEnabled"] = *ctx.Options.AlwaysThinking
+	if te.Options.AlwaysThinking != nil {
+		settings["alwaysThinkingEnabled"] = *te.Options.AlwaysThinking
 	}
 
 	data, err := json.MarshalIndent(settings, "", "  ")
@@ -79,7 +72,7 @@ func (t *Target) Apply(ctx config.Context) error {
 	return os.Rename(tmp, path)
 }
 
-func (t *Target) Discover() (*config.Context, error) {
+func (t *Target) Discover() (*config.TargetEntry, error) {
 	data, err := os.ReadFile(t.settingsPath())
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -93,11 +86,8 @@ func (t *Target) Discover() (*config.Context, error) {
 		return nil, fmt.Errorf("parsing claude settings: %w", err)
 	}
 
-	ctx := &config.Context{
-		Targets: []config.TargetEntry{{ID: ID}},
-	}
+	te := &config.TargetEntry{ID: ID}
 
-	// Reverse-map env vars → abstract provider
 	if envRaw, ok := raw["env"].(map[string]interface{}); ok {
 		for k, v := range envRaw {
 			s, ok := v.(string)
@@ -106,30 +96,30 @@ func (t *Target) Discover() (*config.Context, error) {
 			}
 			switch k {
 			case "ANTHROPIC_BASE_URL":
-				ctx.Provider.Endpoint = s
+				te.Provider.Endpoint = s
 			case "ANTHROPIC_AUTH_TOKEN":
-				ctx.Provider.APIKey = s
+				te.Provider.APIKey = s
 			case "ANTHROPIC_MODEL":
-				ctx.Provider.Model = s
+				te.Provider.Model = s
 			case "ANTHROPIC_DEFAULT_HAIKU_MODEL":
-				ctx.Provider.SmallModel = s
+				te.Provider.SmallModel = s
 			case "DISABLE_TELEMETRY":
 				if s == "1" {
-					t := true
-					ctx.Options.DisableTelemetry = &t
+					b := true
+					te.Options.DisableTelemetry = &b
 				}
 			case "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS":
 				if s == "1" {
-					t := true
-					ctx.Options.DisableBetas = &t
+					b := true
+					te.Options.DisableBetas = &b
 				}
 			}
 		}
 	}
 
 	if thinking, ok := raw["alwaysThinkingEnabled"].(bool); ok {
-		ctx.Options.AlwaysThinking = &thinking
+		te.Options.AlwaysThinking = &thinking
 	}
 
-	return ctx, nil
+	return te, nil
 }

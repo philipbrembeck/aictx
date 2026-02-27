@@ -13,10 +13,10 @@ type Target interface {
 	// Detect returns true if this target is installed / config exists.
 	Detect() bool
 
-	// Apply translates abstract provider/options into this target's config format.
-	Apply(ctx config.Context) error
+	// Apply writes the given target entry's config into this target.
+	Apply(te config.TargetEntry) error
 
-	// Discover reads the target's current config and returns an abstract Context.
+	// Discover reads the target's current config and returns a TargetEntry.
 	// Returns nil if nothing useful is found.
-	Discover() (*config.Context, error)
+	Discover() (*config.TargetEntry, error)
 }

@@ -5,14 +5,13 @@ type Context struct {
 	Name        string        `yaml:"name"`
 	Description string        `yaml:"description,omitempty"`
 	Targets     []TargetEntry `yaml:"targets"`
-	Provider    Provider      `yaml:"provider,omitempty"`
-	Options     Options       `yaml:"options,omitempty"`
 }
 
-// TargetEntry specifies a target to configure, with optional overrides.
+// TargetEntry specifies a target and its configuration.
 type TargetEntry struct {
-	ID        string   `yaml:"id"`
-	Overrides Provider `yaml:"overrides,omitempty"`
+	ID       string   `yaml:"id"`
+	Provider Provider `yaml:"provider,omitempty"`
+	Options  Options  `yaml:"options,omitempty"`
 }
 
 // Provider holds abstract connection settings that each target translates
@@ -37,48 +36,19 @@ type Options struct {
 	DisableBetas     *bool `yaml:"disableBetas,omitempty"`
 }
 
-// EffectiveProvider merges the base provider with target-specific overrides.
-// Override fields win when non-empty.
-func (c *Context) EffectiveProvider(targetID string) Provider {
-	p := c.Provider
-	for _, te := range c.Targets {
-		if te.ID == targetID {
-			if te.Overrides.Endpoint != "" {
-				p.Endpoint = te.Overrides.Endpoint
-			}
-			if te.Overrides.APIKey != "" {
-				p.APIKey = te.Overrides.APIKey
-			}
-			if te.Overrides.Model != "" {
-				p.Model = te.Overrides.Model
-			}
-			if te.Overrides.SmallModel != "" {
-				p.SmallModel = te.Overrides.SmallModel
-			}
-			if len(te.Overrides.Headers) > 0 {
-				merged := make(map[string]string)
-				for k, v := range p.Headers {
-					merged[k] = v
-				}
-				for k, v := range te.Overrides.Headers {
-					merged[k] = v
-				}
-				p.Headers = merged
-			}
-			break
+// GetTarget returns the TargetEntry for the given ID, or nil.
+func (c *Context) GetTarget(targetID string) *TargetEntry {
+	for i := range c.Targets {
+		if c.Targets[i].ID == targetID {
+			return &c.Targets[i]
 		}
 	}
-	return p
+	return nil
 }
 
 // HasTarget returns true if this context includes the given target ID.
 func (c *Context) HasTarget(targetID string) bool {
-	for _, te := range c.Targets {
-		if te.ID == targetID {
-			return true
-		}
-	}
-	return false
+	return c.GetTarget(targetID) != nil
 }
 
 // TargetIDs returns the list of target IDs in this context.

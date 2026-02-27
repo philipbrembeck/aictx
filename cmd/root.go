@@ -99,7 +99,7 @@ func switchContext(cfg *config.Config, name string) error {
 			fmt.Fprintf(os.Stderr, "  - %s: not installed\n", t.Name())
 			continue
 		}
-		if err := t.Apply(*ctx); err != nil {
+		if err := t.Apply(te); err != nil {
 			fmt.Fprintf(os.Stderr, "  ! %s: %v\n", t.Name(), err)
 			continue
 		}

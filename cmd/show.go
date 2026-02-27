@@ -2,10 +2,10 @@ package cmd
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/fschneidewind/aictx/internal/config"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 var showReveal bool
@@ -40,73 +40,18 @@ func showRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("context %q not found", name)
 	}
 
-	fmt.Printf("Context: \033[1m%s\033[0m\n", ctx.Name)
-	if ctx.Description != "" {
-		fmt.Printf("Description: %s\n", ctx.Description)
-	}
-
-	// Provider
-	prov := ctx.Provider
-	if !prov.IsEmpty() {
-		fmt.Println("\nProvider:")
-		if prov.Endpoint != "" {
-			fmt.Printf("  Endpoint    = %s\n", prov.Endpoint)
-		}
-		if prov.APIKey != "" {
-			v := prov.APIKey
-			if !showReveal {
-				v = maskValue(v)
-			}
-			fmt.Printf("  API Key     = %s\n", v)
-		}
-		if prov.Model != "" {
-			fmt.Printf("  Model       = %s\n", prov.Model)
-		}
-		if prov.SmallModel != "" {
-			fmt.Printf("  Small Model = %s\n", prov.SmallModel)
-		}
-		if len(prov.Headers) > 0 {
-			fmt.Println("  Headers:")
-			for k, v := range prov.Headers {
-				fmt.Printf("    %s: %s\n", k, v)
+	// Print as YAML, masking secrets unless --reveal
+	display := *ctx
+	if !showReveal {
+		for i := range display.Targets {
+			if display.Targets[i].Provider.APIKey != "" {
+				display.Targets[i].Provider.APIKey = maskValue(display.Targets[i].Provider.APIKey)
 			}
 		}
-	} else {
-		fmt.Println("\nProvider: (native auth / OAuth)")
 	}
 
-	// Options
-	fmt.Println("\nOptions:")
-	if ctx.Options.AlwaysThinking != nil {
-		fmt.Printf("  Always Thinking    = %v\n", *ctx.Options.AlwaysThinking)
-	}
-	if ctx.Options.DisableTelemetry != nil {
-		fmt.Printf("  Disable Telemetry  = %v\n", *ctx.Options.DisableTelemetry)
-	}
-	if ctx.Options.DisableBetas != nil {
-		fmt.Printf("  Disable Betas      = %v\n", *ctx.Options.DisableBetas)
-	}
-
-	// Targets
-	fmt.Println("\nTargets:")
-	for _, te := range ctx.Targets {
-		overrides := []string{}
-		if te.Overrides.Model != "" {
-			overrides = append(overrides, fmt.Sprintf("model → %s", te.Overrides.Model))
-		}
-		if te.Overrides.Endpoint != "" {
-			overrides = append(overrides, fmt.Sprintf("endpoint → %s", te.Overrides.Endpoint))
-		}
-		if te.Overrides.SmallModel != "" {
-			overrides = append(overrides, fmt.Sprintf("smallModel → %s", te.Overrides.SmallModel))
-		}
-		if len(overrides) > 0 {
-			fmt.Printf("  * %s  (%s)\n", te.ID, strings.Join(overrides, ", "))
-		} else {
-			fmt.Printf("  * %s\n", te.ID)
-		}
-	}
-
+	yamlBytes, _ := yaml.Marshal(display)
+	fmt.Print(string(yamlBytes))
 	return nil
 }
 

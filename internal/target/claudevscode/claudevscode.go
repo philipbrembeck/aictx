@@ -17,7 +17,6 @@ const ID = "claude-code-vscode"
 
 var trailingCommaRe = regexp.MustCompile(`,(\s*[\]}])`)
 
-// Target implements the VSCode Claude Code extension target.
 type Target struct{}
 
 func New() *Target { return &Target{} }
@@ -32,7 +31,7 @@ func (t *Target) settingsPath() string {
 		return filepath.Join(home, "Library", "Application Support", "Code", "User", "settings.json")
 	case "linux":
 		return filepath.Join(home, ".config", "Code", "User", "settings.json")
-	default: // windows
+	default:
 		return filepath.Join(os.Getenv("APPDATA"), "Code", "User", "settings.json")
 	}
 }
@@ -42,7 +41,6 @@ func (t *Target) Detect() bool {
 	return err == nil
 }
 
-// readSettings reads the VSCode settings file and strips trailing commas.
 func (t *Target) readSettings() ([]byte, error) {
 	data, err := os.ReadFile(t.settingsPath())
 	if err != nil {
@@ -51,7 +49,6 @@ func (t *Target) readSettings() ([]byte, error) {
 	return trailingCommaRe.ReplaceAll(data, []byte("$1")), nil
 }
 
-// writeSettings writes the settings file atomically.
 func (t *Target) writeSettings(data []byte) error {
 	path := t.settingsPath()
 	tmp := path + ".aictx-tmp"
@@ -61,36 +58,32 @@ func (t *Target) writeSettings(data []byte) error {
 	return os.Rename(tmp, path)
 }
 
-func (t *Target) Apply(ctx config.Context) error {
+func (t *Target) Apply(te config.TargetEntry) error {
 	data, err := t.readSettings()
 	if err != nil {
 		return fmt.Errorf("reading vscode settings: %w", err)
 	}
 
-	prov := ctx.EffectiveProvider(ID)
-
-	// Build env vars from abstract provider + options
 	env := make(map[string]string)
-	if prov.Endpoint != "" {
-		env["ANTHROPIC_BASE_URL"] = prov.Endpoint
+	if te.Provider.Endpoint != "" {
+		env["ANTHROPIC_BASE_URL"] = te.Provider.Endpoint
 	}
-	if prov.APIKey != "" {
-		env["ANTHROPIC_AUTH_TOKEN"] = prov.APIKey
+	if te.Provider.APIKey != "" {
+		env["ANTHROPIC_AUTH_TOKEN"] = te.Provider.APIKey
 	}
-	if prov.Model != "" {
-		env["ANTHROPIC_MODEL"] = prov.Model
+	if te.Provider.Model != "" {
+		env["ANTHROPIC_MODEL"] = te.Provider.Model
 	}
-	if prov.SmallModel != "" {
-		env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = prov.SmallModel
+	if te.Provider.SmallModel != "" {
+		env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = te.Provider.SmallModel
 	}
-	if ctx.Options.DisableTelemetry != nil && *ctx.Options.DisableTelemetry {
+	if te.Options.DisableTelemetry != nil && *te.Options.DisableTelemetry {
 		env["DISABLE_TELEMETRY"] = "1"
 	}
-	if ctx.Options.DisableBetas != nil && *ctx.Options.DisableBetas {
+	if te.Options.DisableBetas != nil && *te.Options.DisableBetas {
 		env["CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS"] = "1"
 	}
 
-	// Set or remove claudeCode.environmentVariables
 	envVars := buildEnvVarsArray(env)
 	if len(envVars) > 0 {
 		data, err = sjson.SetBytes(data, "claudeCode\\.environmentVariables", envVars)
@@ -104,9 +97,8 @@ func (t *Target) Apply(ctx config.Context) error {
 		}
 	}
 
-	// Set or remove claudeCode.selectedModel
-	if prov.Model != "" {
-		data, err = sjson.SetBytes(data, "claudeCode\\.selectedModel", prov.Model)
+	if te.Provider.Model != "" {
+		data, err = sjson.SetBytes(data, "claudeCode\\.selectedModel", te.Provider.Model)
 		if err != nil {
 			return fmt.Errorf("setting model: %w", err)
 		}
@@ -120,7 +112,7 @@ func (t *Target) Apply(ctx config.Context) error {
 	return t.writeSettings(data)
 }
 
-func (t *Target) Discover() (*config.Context, error) {
+func (t *Target) Discover() (*config.TargetEntry, error) {
 	data, err := t.readSettings()
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -129,11 +121,8 @@ func (t *Target) Discover() (*config.Context, error) {
 		return nil, fmt.Errorf("reading vscode settings: %w", err)
 	}
 
-	ctx := &config.Context{
-		Targets: []config.TargetEntry{{ID: ID}},
-	}
+	te := &config.TargetEntry{ID: ID}
 
-	// Reverse-map VSCode env vars → abstract provider
 	envArr := gjson.GetBytes(data, `claudeCode\.environmentVariables`)
 	if envArr.Exists() && envArr.IsArray() {
 		envArr.ForEach(func(_, value gjson.Result) bool {
@@ -141,35 +130,34 @@ func (t *Target) Discover() (*config.Context, error) {
 			val := value.Get("value").String()
 			switch name {
 			case "ANTHROPIC_BASE_URL":
-				ctx.Provider.Endpoint = val
+				te.Provider.Endpoint = val
 			case "ANTHROPIC_AUTH_TOKEN":
-				ctx.Provider.APIKey = val
+				te.Provider.APIKey = val
 			case "ANTHROPIC_MODEL":
-				ctx.Provider.Model = val
+				te.Provider.Model = val
 			case "ANTHROPIC_DEFAULT_HAIKU_MODEL":
-				ctx.Provider.SmallModel = val
+				te.Provider.SmallModel = val
 			case "DISABLE_TELEMETRY":
 				if val == "1" {
-					t := true
-					ctx.Options.DisableTelemetry = &t
+					b := true
+					te.Options.DisableTelemetry = &b
 				}
 			case "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS":
 				if val == "1" {
-					t := true
-					ctx.Options.DisableBetas = &t
+					b := true
+					te.Options.DisableBetas = &b
 				}
 			}
 			return true
 		})
 	}
 
-	// Extract selected model (may differ from env var model)
 	model := gjson.GetBytes(data, `claudeCode\.selectedModel`)
-	if model.Exists() && ctx.Provider.Model == "" {
-		ctx.Provider.Model = model.String()
+	if model.Exists() && te.Provider.Model == "" {
+		te.Provider.Model = model.String()
 	}
 
-	return ctx, nil
+	return te, nil
 }
 
 type envVar struct {

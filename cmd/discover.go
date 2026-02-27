@@ -9,6 +9,7 @@ import (
 	"github.com/fschneidewind/aictx/internal/config"
 	"github.com/fschneidewind/aictx/internal/target"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 var discoverName string
@@ -27,96 +28,51 @@ func init() {
 func discoverRun(cmd *cobra.Command, args []string) error {
 	fmt.Println("Scanning targets...")
 
-	merged := &config.Context{}
 	var targets []config.TargetEntry
 
-	found := false
 	for _, t := range target.All() {
 		if !t.Detect() {
 			fmt.Printf("  [--] %s: not found\n", t.Name())
 			continue
 		}
 
-		discovered, err := t.Discover()
+		te, err := t.Discover()
 		if err != nil {
 			fmt.Printf("  [!!] %s: %v\n", t.Name(), err)
 			continue
 		}
-		if discovered == nil {
+		if te == nil {
 			fmt.Printf("  [--] %s: no config found\n", t.Name())
 			continue
 		}
 
-		fmt.Printf("  [OK] %s\n", t.Name())
-		found = true
-		targets = append(targets, config.TargetEntry{ID: t.ID()})
-
-		// Merge provider (first target wins on conflicts)
-		if merged.Provider.Endpoint == "" && discovered.Provider.Endpoint != "" {
-			merged.Provider.Endpoint = discovered.Provider.Endpoint
-		}
-		if merged.Provider.APIKey == "" && discovered.Provider.APIKey != "" {
-			merged.Provider.APIKey = discovered.Provider.APIKey
-		}
-		if merged.Provider.Model == "" && discovered.Provider.Model != "" {
-			merged.Provider.Model = discovered.Provider.Model
-		}
-		if merged.Provider.SmallModel == "" && discovered.Provider.SmallModel != "" {
-			merged.Provider.SmallModel = discovered.Provider.SmallModel
-		}
-
-		// Merge options
-		if merged.Options.AlwaysThinking == nil && discovered.Options.AlwaysThinking != nil {
-			merged.Options.AlwaysThinking = discovered.Options.AlwaysThinking
-		}
-		if merged.Options.DisableTelemetry == nil && discovered.Options.DisableTelemetry != nil {
-			merged.Options.DisableTelemetry = discovered.Options.DisableTelemetry
-		}
-		if merged.Options.DisableBetas == nil && discovered.Options.DisableBetas != nil {
-			merged.Options.DisableBetas = discovered.Options.DisableBetas
-		}
+		fmt.Printf("  [OK] %s (%s)\n", t.Name(), t.ID())
+		targets = append(targets, *te)
 	}
 
-	if !found {
+	if len(targets) == 0 {
 		return fmt.Errorf("no targets with existing config found")
 	}
 
-	merged.Targets = targets
-
-	// Show what was discovered
-	fmt.Println("\nDiscovered provider:")
-	if merged.Provider.Endpoint != "" {
-		fmt.Printf("  Endpoint    = %s\n", merged.Provider.Endpoint)
-	}
-	if merged.Provider.APIKey != "" {
-		fmt.Printf("  API Key     = %s\n", maskValue(merged.Provider.APIKey))
-	}
-	if merged.Provider.Model != "" {
-		fmt.Printf("  Model       = %s\n", merged.Provider.Model)
-	}
-	if merged.Provider.SmallModel != "" {
-		fmt.Printf("  Small Model = %s\n", merged.Provider.SmallModel)
-	}
-	if merged.Provider.IsEmpty() {
-		fmt.Println("  (native auth / OAuth)")
+	result := &config.Context{
+		Name:    "<name>",
+		Targets: targets,
 	}
 
-	if merged.Options.AlwaysThinking != nil {
-		fmt.Printf("\n  Always Thinking   = %v\n", *merged.Options.AlwaysThinking)
+	// Print discovered config as YAML (mask secrets in preview)
+	preview := *result
+	for i := range preview.Targets {
+		if preview.Targets[i].Provider.APIKey != "" {
+			preview.Targets[i].Provider.APIKey = maskValue(preview.Targets[i].Provider.APIKey)
+		}
 	}
-	if merged.Options.DisableTelemetry != nil {
-		fmt.Printf("  Disable Telemetry = %v\n", *merged.Options.DisableTelemetry)
-	}
-	if merged.Options.DisableBetas != nil {
-		fmt.Printf("  Disable Betas     = %v\n", *merged.Options.DisableBetas)
-	}
-
-	fmt.Printf("\n  Targets: %v\n", merged.TargetIDs())
+	yamlBytes, _ := yaml.Marshal(preview)
+	fmt.Printf("\n%s", string(yamlBytes))
 
 	// Get context name
 	name := discoverName
 	if name == "" {
-		fmt.Print("\nSave as context [name]: ")
+		fmt.Print("Save as context [name]: ")
 		scanner := bufio.NewScanner(os.Stdin)
 		if scanner.Scan() {
 			name = strings.TrimSpace(scanner.Text())
@@ -127,7 +83,7 @@ func discoverRun(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	merged.Name = name
+	result.Name = name
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -138,7 +94,7 @@ func discoverRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("context %q already exists. Remove it first with 'aictx rm %s'", name, name)
 	}
 
-	cfg.Contexts = append(cfg.Contexts, *merged)
+	cfg.Contexts = append(cfg.Contexts, *result)
 	cfg.State.Current = name
 
 	if err := config.Save(cfg); err != nil {
