@@ -18,14 +18,28 @@ func New() *Target { return &Target{} }
 func (t *Target) ID() string   { return ID }
 func (t *Target) Name() string { return "Claude Code CLI" }
 
-func (t *Target) settingsPath() string {
+func (t *Target) claudeDir() string {
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".claude", "settings.json")
+	return filepath.Join(home, ".claude")
+}
+
+func (t *Target) settingsPath() string {
+	return filepath.Join(t.claudeDir(), "settings.json")
+}
+
+func (t *Target) credentialsPath() string {
+	return filepath.Join(t.claudeDir(), ".credentials.json")
 }
 
 func (t *Target) Detect() bool {
-	_, err := os.Stat(filepath.Dir(t.settingsPath()))
-	return err == nil
+	// Installed if either credentials or settings exist
+	if _, err := os.Stat(t.credentialsPath()); err == nil {
+		return true
+	}
+	if _, err := os.Stat(t.settingsPath()); err == nil {
+		return true
+	}
+	return false
 }
 
 func (t *Target) Apply(te config.TargetEntry) error {
@@ -76,7 +90,8 @@ func (t *Target) Discover() (*config.TargetEntry, error) {
 	data, err := os.ReadFile(t.settingsPath())
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			// No settings.json but target is detected (OAuth mode)
+			return &config.TargetEntry{ID: ID}, nil
 		}
 		return nil, fmt.Errorf("reading claude settings: %w", err)
 	}
