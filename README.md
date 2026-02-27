@@ -19,6 +19,18 @@ Each target translates abstract provider settings into its own config format. PR
 
 ## Install
 
+> **Linux note:** API keys are stored in the system keychain via libsecret. Install with:
+> `sudo apt-get install libsecret-1-0` (Debian/Ubuntu) or equivalent.
+
+### Homebrew (macOS / Linux)
+
+```bash
+brew tap IQNeoXen/aictx
+brew install aictx
+```
+
+### From source (go install)
+
 Requires [Go](https://go.dev/doc/install) (1.21+).
 
 ```bash
@@ -38,7 +50,7 @@ echo 'export PATH="$HOME/go/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
 fish_add_path ~/go/bin
 ```
 
-Or build from source:
+### Build from source
 
 ```bash
 git clone https://github.com/IQNeoXen/aictx.git

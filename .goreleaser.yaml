@@ -1,0 +1,55 @@
+version: 2
+
+project_name: aictx
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+    main: .
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+release:
+  github:
+    owner: "{{ .Env.GITHUB_REPOSITORY_OWNER }}"
+    name: aictx
+  generate_release_notes: true
+
+brews:
+  - name: aictx
+    repository:
+      owner: "{{ .Env.GITHUB_REPOSITORY_OWNER }}"
+      name: homebrew-aictx
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: "https://github.com/{{ .Env.GITHUB_REPOSITORY_OWNER }}/aictx"
+    description: "kubectx-style switcher for AI tool configurations (API keys, models, endpoints)"
+    license: "MIT"
+    install: |
+      bin.install "aictx"
+    test: |
+      system "#{bin}/aictx", "--version"
