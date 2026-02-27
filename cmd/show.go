@@ -11,10 +11,11 @@ import (
 var showReveal bool
 
 var showCmd = &cobra.Command{
-	Use:   "show [name]",
-	Short: "Show context details (defaults to current)",
-	Args:  cobra.MaximumNArgs(1),
-	RunE:  showRun,
+	Use:               "show [name]",
+	Short:             "Show context details (defaults to current)",
+	Args:              cobra.MaximumNArgs(1),
+	ValidArgsFunction: contextCompletion,
+	RunE:              showRun,
 }
 
 func init() {

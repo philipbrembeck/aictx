@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/fschneidewind/aictx/internal/config"
-	"github.com/fschneidewind/aictx/internal/fzf"
+	"github.com/fschneidewind/aictx/internal/picker"
 	"github.com/fschneidewind/aictx/internal/target"
 	"github.com/spf13/cobra"
 )
@@ -18,6 +18,18 @@ var rootCmd = &cobra.Command{
 	RunE:          rootRun,
 	SilenceErrors: true,
 	SilenceUsage:  true,
+	ValidArgsFunction: contextCompletion,
+}
+
+func contextCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) > 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+	return cfg.ContextNames(), cobra.ShellCompDirectiveNoFileComp
 }
 
 func Execute() {
@@ -46,14 +58,14 @@ func rootRun(cmd *cobra.Command, args []string) error {
 		return switchContext(cfg, args[0])
 	}
 
-	// No args: list or fzf pick
+	// No args: interactive picker or plain list
 	if len(cfg.Contexts) == 0 {
 		fmt.Println("No contexts configured. Use 'aictx add <name>' or 'aictx discover' to get started.")
 		return nil
 	}
 
-	if fzf.Available() && fzf.IsTerminal() {
-		selected, err := fzf.Pick(cfg.ContextNames(), cfg.State.Current)
+	if picker.IsTerminal() {
+		selected, err := picker.Pick(cfg.ContextNames(), cfg.State.Current)
 		if err != nil {
 			return err
 		}
@@ -63,10 +75,10 @@ func rootRun(cmd *cobra.Command, args []string) error {
 		return switchContext(cfg, selected)
 	}
 
-	// Plain list
+	// Plain list (piped output)
 	for _, c := range cfg.Contexts {
 		if c.Name == cfg.State.Current {
-			fmt.Printf("* \033[1m%s\033[0m\n", c.Name)
+			fmt.Printf("* %s\n", c.Name)
 		} else {
 			fmt.Printf("  %s\n", c.Name)
 		}

@@ -12,6 +12,7 @@ var rmCmd = &cobra.Command{
 	Aliases: []string{"remove", "delete"},
 	Short:   "Remove a context",
 	Args:    cobra.ExactArgs(1),
+	ValidArgsFunction: contextCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
 
