@@ -4,20 +4,20 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/fschneidewind/aictx/internal/config"
-	"github.com/fschneidewind/aictx/internal/picker"
-	"github.com/fschneidewind/aictx/internal/target"
+	"github.com/IQNeoXen/aictx/internal/config"
+	"github.com/IQNeoXen/aictx/internal/picker"
+	"github.com/IQNeoXen/aictx/internal/target"
 	"github.com/spf13/cobra"
 )
 
 var rootCmd = &cobra.Command{
-	Use:           "aictx [context]",
-	Short:         "Switch AI tool contexts",
-	Long:          "aictx is a context-switcher for AI tool configurations. Switch between API keys, models and other settings.",
-	Args:          cobra.MaximumNArgs(1),
-	RunE:          rootRun,
-	SilenceErrors: true,
-	SilenceUsage:  true,
+	Use:               "aictx [context]",
+	Short:             "Switch AI tool contexts",
+	Long:              "aictx is a context-switcher for AI tool configurations. Switch between API keys, models and other settings.",
+	Args:              cobra.MaximumNArgs(1),
+	RunE:              rootRun,
+	SilenceErrors:     true,
+	SilenceUsage:      true,
 	ValidArgsFunction: contextCompletion,
 }
 

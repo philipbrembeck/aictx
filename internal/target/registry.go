@@ -1,8 +1,8 @@
 package target
 
 import (
-	"github.com/fschneidewind/aictx/internal/target/claudecli"
-	"github.com/fschneidewind/aictx/internal/target/claudevscode"
+	"github.com/IQNeoXen/aictx/internal/target/claudecli"
+	"github.com/IQNeoXen/aictx/internal/target/claudevscode"
 )
 
 // All returns all known targets.

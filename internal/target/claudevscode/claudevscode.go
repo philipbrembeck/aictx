@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"sort"
 
-	"github.com/fschneidewind/aictx/internal/config"
+	"github.com/IQNeoXen/aictx/internal/config"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )

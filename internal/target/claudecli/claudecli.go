@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/fschneidewind/aictx/internal/config"
+	"github.com/IQNeoXen/aictx/internal/config"
 )
 
 const ID = "claude-code-cli"

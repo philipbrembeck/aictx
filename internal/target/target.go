@@ -1,6 +1,6 @@
 package target
 
-import "github.com/fschneidewind/aictx/internal/config"
+import "github.com/IQNeoXen/aictx/internal/config"
 
 // Target represents a tool whose configuration is managed by aictx.
 type Target interface {

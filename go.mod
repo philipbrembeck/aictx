@@ -1,4 +1,4 @@
-module github.com/fschneidewind/aictx
+module github.com/IQNeoXen/aictx
 
 go 1.25.0
 

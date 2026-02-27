@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/fschneidewind/aictx/internal/config"
-	"github.com/fschneidewind/aictx/internal/target"
+	"github.com/IQNeoXen/aictx/internal/config"
+	"github.com/IQNeoXen/aictx/internal/target"
 	"github.com/spf13/cobra"
 )
 

@@ -3,15 +3,15 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/fschneidewind/aictx/internal/config"
+	"github.com/IQNeoXen/aictx/internal/config"
 	"github.com/spf13/cobra"
 )
 
 var rmCmd = &cobra.Command{
-	Use:     "rm <name>",
-	Aliases: []string{"remove", "delete"},
-	Short:   "Remove a context",
-	Args:    cobra.ExactArgs(1),
+	Use:               "rm <name>",
+	Aliases:           []string{"remove", "delete"},
+	Short:             "Remove a context",
+	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: contextCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]

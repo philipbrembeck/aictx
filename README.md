@@ -1,19 +1,19 @@
 # aictx
 
-A context switcher for AI tools. Like [kubectx](https://github.com/ahmetb/kubectx) but for AI tool configurations.
+A context switcher for AI tools. Inspired by [kubectx](https://github.com/ahmetb/kubectx), but for AI tool configurations.
 
 Switch between API keys, endpoints, models and other settings across multiple AI tools with a single command.
 
 ## Install
 
 ```bash
-go install github.com/fschneidewind/aictx@latest
+go install github.com/IQNeoXen/aictx@latest
 ```
 
 Or build from source:
 
 ```bash
-git clone https://github.com/fschneidewind/aictx.git
+git clone https://github.com/IQNeoXen/aictx.git
 cd aictx
 go build -o aictx .
 ```
@@ -41,22 +41,22 @@ aictx
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `aictx` | List contexts or pick interactively |
-| `aictx <name>` | Switch to a context |
-| `aictx -` | Switch to the previous context |
-| `aictx add <name>` | Add a new context (interactive or with flags) |
-| `aictx rm <name>` | Remove a context |
-| `aictx show [name]` | Show context details (defaults to current) |
-| `aictx current` | Print the current context name |
-| `aictx discover` | Detect config from installed tools and save as a context |
+| Command             | Description                                              |
+| ------------------- | -------------------------------------------------------- |
+| `aictx`             | List contexts or pick interactively                      |
+| `aictx <name>`      | Switch to a context                                      |
+| `aictx -`           | Switch to the previous context                           |
+| `aictx add <name>`  | Add a new context (interactive or with flags)            |
+| `aictx rm <name>`   | Remove a context                                         |
+| `aictx show [name]` | Show context details (defaults to current)               |
+| `aictx current`     | Print the current context name                           |
+| `aictx discover`    | Detect config from installed tools and save as a context |
 
 ## Supported Targets
 
-| Target | ID | Config File |
-|--------|----|-------------|
-| Claude Code CLI | `claude-code-cli` | `~/.claude/settings.json` |
+| Target                 | ID                   | Config File                                             |
+| ---------------------- | -------------------- | ------------------------------------------------------- |
+| Claude Code CLI        | `claude-code-cli`    | `~/.claude/settings.json`                               |
 | Claude Code for VSCode | `claude-code-vscode` | `~/Library/Application Support/Code/User/settings.json` |
 
 Each target translates abstract provider settings into its own config format.
