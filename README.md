@@ -1,5 +1,7 @@
 # aictx
 
+> **Note:** This project was largely created using LLMs (Claude). Use at your own discretion.
+
 A context switcher for AI tools. Inspired by [kubectx](https://github.com/ahmetb/kubectx), but for AI tool configurations.
 
 Switch between API keys, endpoints, models and other settings across multiple AI tools with a single command.
