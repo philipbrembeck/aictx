@@ -24,11 +24,11 @@ builds:
     main: .
 
 archives:
-  - format: tar.gz
+  - formats: [tar.gz]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
 
 checksum:
   name_template: "checksums.txt"
@@ -39,16 +39,13 @@ release:
     owner: "{{ .Env.GITHUB_REPOSITORY_OWNER }}"
     name: aictx
 
-brews:
+homebrew_casks:
   - name: aictx
+    binaries:
+      - aictx
     repository:
       owner: "{{ .Env.GITHUB_REPOSITORY_OWNER }}"
       name: homebrew-aictx
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     homepage: "https://github.com/{{ .Env.GITHUB_REPOSITORY_OWNER }}/aictx"
     description: "Context switcher for AI tool configurations, inspired by kubectx."
-    license: "MIT"
-    install: |
-      bin.install "aictx"
-    test: |
-      system "#{bin}/aictx", "--version"
