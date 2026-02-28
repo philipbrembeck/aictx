@@ -99,6 +99,10 @@ func (t *Target) Apply(te config.TargetEntry) error {
 	if te.Options.DisableBetas != nil && *te.Options.DisableBetas {
 		newEnv["CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS"] = "1"
 	}
+	if len(te.Provider.Headers) > 0 {
+		b, _ := json.Marshal(te.Provider.Headers)
+		newEnv["ANTHROPIC_CUSTOM_HEADERS"] = string(b)
+	}
 	// Merge custom env vars from the TargetEntry
 	for k, v := range te.Env {
 		newEnv[k] = v
@@ -176,6 +180,11 @@ func (t *Target) Discover() (*config.TargetEntry, error) {
 				if s == "1" {
 					b := true
 					te.Options.DisableBetas = &b
+				}
+			case "ANTHROPIC_CUSTOM_HEADERS":
+				var headers map[string]string
+				if jsonErr := json.Unmarshal([]byte(s), &headers); jsonErr == nil {
+					te.Provider.Headers = headers
 				}
 			default:
 				// Collect unrecognized keys as custom env vars

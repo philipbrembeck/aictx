@@ -22,6 +22,7 @@ var (
 	addNoTelemetry bool
 	addNoBetas     bool
 	addEnv         []string
+	addHeaders     []string
 )
 
 var addCmd = &cobra.Command{
@@ -42,6 +43,7 @@ func init() {
 	addCmd.Flags().BoolVar(&addNoTelemetry, "no-telemetry", false, "Disable telemetry")
 	addCmd.Flags().BoolVar(&addNoBetas, "no-betas", false, "Disable experimental betas")
 	addCmd.Flags().StringArrayVar(&addEnv, "env", nil, "Extra environment variable as KEY=VALUE (repeatable)")
+	addCmd.Flags().StringArrayVar(&addHeaders, "header", nil, "Custom HTTP header as Key:Value (repeatable)")
 }
 
 func addRun(cmd *cobra.Command, args []string) error {
@@ -60,7 +62,7 @@ func addRun(cmd *cobra.Command, args []string) error {
 
 	flagsProvided := len(addTargets) > 0 || addDesc != "" || addEndpoint != "" ||
 		addAPIKey != "" || addModel != "" || addSmallModel != "" ||
-		addThinking || addNoTelemetry || addNoBetas || len(addEnv) > 0
+		addThinking || addNoTelemetry || addNoBetas || len(addEnv) > 0 || len(addHeaders) > 0
 
 	if flagsProvided {
 		ctx.Description = addDesc
@@ -97,6 +99,18 @@ func addRun(cmd *cobra.Command, args []string) error {
 				envMap = map[string]string{}
 			}
 			envMap[e[:idx]] = e[idx+1:]
+		}
+
+		// Parse --header Key:Value flags
+		for _, h := range addHeaders {
+			idx := strings.Index(h, ":")
+			if idx <= 0 {
+				return fmt.Errorf("invalid --header value %q: expected Key:Value", h)
+			}
+			if prov.Headers == nil {
+				prov.Headers = map[string]string{}
+			}
+			prov.Headers[h[:idx]] = h[idx+1:]
 		}
 
 		for _, tid := range addTargets {
@@ -170,6 +184,19 @@ func addRun(cmd *cobra.Command, args []string) error {
 			if yesNo(scanner, "  Disable experimental betas?", false) {
 				b := true
 				te.Options.DisableBetas = &b
+			}
+
+			fmt.Println("Custom headers (leave name empty to finish):")
+			for {
+				key := prompt(scanner, "  Header name")
+				if key == "" {
+					break
+				}
+				value := prompt(scanner, "  Value")
+				if te.Provider.Headers == nil {
+					te.Provider.Headers = map[string]string{}
+				}
+				te.Provider.Headers[key] = value
 			}
 
 			fmt.Println("Custom env vars (leave name empty to finish):")

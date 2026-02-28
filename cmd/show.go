@@ -50,6 +50,13 @@ func showRun(cmd *cobra.Command, args []string) error {
 			if display.Targets[i].Provider.APIKey != "" {
 				display.Targets[i].Provider.APIKey = maskValue(display.Targets[i].Provider.APIKey)
 			}
+			if len(display.Targets[i].Provider.Headers) > 0 {
+				masked := make(map[string]string, len(display.Targets[i].Provider.Headers))
+				for k := range display.Targets[i].Provider.Headers {
+					masked[k] = "********"
+				}
+				display.Targets[i].Provider.Headers = masked
+			}
 			if len(display.Targets[i].Env) > 0 {
 				masked := make(map[string]string, len(display.Targets[i].Env))
 				for k, v := range display.Targets[i].Env {
