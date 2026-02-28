@@ -8,6 +8,7 @@ import (
 	"github.com/IQNeoXen/aictx/internal/picker"
 	"github.com/IQNeoXen/aictx/internal/target"
 	"github.com/IQNeoXen/aictx/internal/target/claudecli"
+	"github.com/IQNeoXen/aictx/internal/target/claudevscode"
 	"github.com/spf13/cobra"
 )
 
@@ -117,11 +118,14 @@ func switchContext(cfg *config.Config, name string) error {
 			continue
 		}
 
-		// For claudecli, inject the previously-applied env keys so Apply()
-		// can remove stale entries before writing new ones.
-		if ct, ok := t.(*claudecli.Target); ok {
-			if cfg.State.AppliedEnvKeys != nil {
+		// Inject previously-applied env keys so Apply() can remove stale
+		// entries before writing new ones.
+		if cfg.State.AppliedEnvKeys != nil {
+			if ct, ok := t.(*claudecli.Target); ok {
 				ct.PrevEnvKeys = cfg.State.AppliedEnvKeys[te.ID]
+			}
+			if vt, ok := t.(*claudevscode.Target); ok {
+				vt.PrevEnvKeys = cfg.State.AppliedEnvKeys[te.ID]
 			}
 		}
 
@@ -134,8 +138,8 @@ func switchContext(cfg *config.Config, name string) error {
 
 		// Track which env keys were applied for this target so the next
 		// switch can clean them up.
-		if te.ID == claudecli.ID {
-			keys := claudecliAppliedEnvKeys(te)
+		if te.ID == claudecli.ID || te.ID == claudevscode.ID {
+			keys := targetAppliedEnvKeys(te)
 			if len(keys) > 0 {
 				newAppliedEnvKeys[te.ID] = keys
 			}
@@ -162,9 +166,9 @@ func switchContext(cfg *config.Config, name string) error {
 	return nil
 }
 
-// claudecliAppliedEnvKeys returns the set of env keys that Apply() will write
-// for the given TargetEntry when targeting claudecli. Used to track stale keys.
-func claudecliAppliedEnvKeys(te config.TargetEntry) []string {
+// targetAppliedEnvKeys returns the set of env keys that Apply() will write
+// for a TargetEntry. Used by both claudecli and claudevscode to track stale keys.
+func targetAppliedEnvKeys(te config.TargetEntry) []string {
 	var keys []string
 	if te.Provider.Endpoint != "" {
 		keys = append(keys, "ANTHROPIC_BASE_URL")
