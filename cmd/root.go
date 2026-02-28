@@ -184,6 +184,9 @@ func claudecliAppliedEnvKeys(te config.TargetEntry) []string {
 	if te.Options.DisableBetas != nil && *te.Options.DisableBetas {
 		keys = append(keys, "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS")
 	}
+	if len(te.Provider.Headers) > 0 {
+		keys = append(keys, "ANTHROPIC_CUSTOM_HEADERS")
+	}
 	for k := range te.Env {
 		keys = append(keys, k)
 	}

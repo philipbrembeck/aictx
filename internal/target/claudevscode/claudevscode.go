@@ -1,6 +1,7 @@
 package claudevscode
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -83,6 +84,10 @@ func (t *Target) Apply(te config.TargetEntry) error {
 	if te.Options.DisableBetas != nil && *te.Options.DisableBetas {
 		env["CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS"] = "1"
 	}
+	if len(te.Provider.Headers) > 0 {
+		b, _ := json.Marshal(te.Provider.Headers)
+		env["ANTHROPIC_CUSTOM_HEADERS"] = string(b)
+	}
 	// Merge custom env vars from the TargetEntry
 	for k, v := range te.Env {
 		env[k] = v
@@ -150,6 +155,11 @@ func (t *Target) Discover() (*config.TargetEntry, error) {
 				if val == "1" {
 					b := true
 					te.Options.DisableBetas = &b
+				}
+			case "ANTHROPIC_CUSTOM_HEADERS":
+				var headers map[string]string
+				if jsonErr := json.Unmarshal([]byte(val), &headers); jsonErr == nil {
+					te.Provider.Headers = headers
 				}
 			default:
 				// Collect unrecognized entries as custom env vars

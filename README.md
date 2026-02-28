@@ -154,6 +154,17 @@ aictx add work-project \
 
 The `--env` flag is repeatable and stores arbitrary environment variables alongside the context. They are applied to the target's config on switch and cleaned up on the next switch.
 
+Use `--header` to pass custom HTTP headers required by LiteLLM proxies or other endpoints (e.g. `X-Proxy-Auth`, `X-Team-ID`). Headers are encoded as a JSON object in the `ANTHROPIC_CUSTOM_HEADERS` environment variable that Claude Code reads natively:
+
+```bash
+aictx add work-project \
+  --target claude-code-cli \
+  --endpoint https://proxy.example.com \
+  --api-key sk-xxx \
+  --header X-Proxy-Auth:token123 \
+  --header X-Team-ID:eng
+```
+
 **Interactively** (run `aictx add <name>` without flags):
 
 ```
@@ -203,9 +214,9 @@ Saved.
 ## Showing a Context
 
 ```bash
-aictx show            # current context (API key and env var values masked)
+aictx show            # current context (API key, header values, and env var values masked)
 aictx show work       # specific context
-aictx show --reveal   # show full API key and env var values
+aictx show --reveal   # show full API key, header values, and env var values
 ```
 
 ## Shell Completion
@@ -255,6 +266,9 @@ contexts:
           endpoint: https://proxy.example.com
           model: claude-opus-4-6
           smallModel: claude-haiku-4-5
+          headers:
+            X-Proxy-Auth: token123
+            X-Team-ID: eng
         options:
           alwaysThinking: true
           disableTelemetry: true
