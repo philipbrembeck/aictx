@@ -18,7 +18,13 @@ const ID = "claude-code-vscode"
 
 var trailingCommaRe = regexp.MustCompile(`,(\s*[\]}])`)
 
-type Target struct{}
+// Target implements the claudevscode target.
+// PrevEnvKeys holds the env keys written by the previous switch for this
+// target so that Apply() can remove stale entries before writing new ones.
+// Populate this field before calling Apply().
+type Target struct {
+	PrevEnvKeys []string
+}
 
 func New() *Target { return &Target{} }
 
@@ -65,35 +71,56 @@ func (t *Target) Apply(te config.TargetEntry) error {
 		return fmt.Errorf("reading vscode settings: %w", err)
 	}
 
-	env := make(map[string]string)
+	// --- 1. Read the existing environmentVariables array into a map ---
+	existingEnv := map[string]string{}
+	envArr := gjson.GetBytes(data, `claudeCode\.environmentVariables`)
+	if envArr.Exists() && envArr.IsArray() {
+		envArr.ForEach(func(_, v gjson.Result) bool {
+			existingEnv[v.Get("name").String()] = v.Get("value").String()
+			return true
+		})
+	}
+
+	// --- 2. Remove keys written by the previous switch ---
+	for _, k := range t.PrevEnvKeys {
+		delete(existingEnv, k)
+	}
+
+	// --- 3. Build new entries from the TargetEntry ---
+	newEnv := map[string]string{}
 	if te.Provider.Endpoint != "" {
-		env["ANTHROPIC_BASE_URL"] = te.Provider.Endpoint
+		newEnv["ANTHROPIC_BASE_URL"] = te.Provider.Endpoint
 	}
 	if te.Provider.APIKey != "" {
-		env["ANTHROPIC_AUTH_TOKEN"] = te.Provider.APIKey
+		newEnv["ANTHROPIC_AUTH_TOKEN"] = te.Provider.APIKey
 	}
 	if te.Provider.Model != "" {
-		env["ANTHROPIC_MODEL"] = te.Provider.Model
+		newEnv["ANTHROPIC_MODEL"] = te.Provider.Model
 	}
 	if te.Provider.SmallModel != "" {
-		env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = te.Provider.SmallModel
+		newEnv["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = te.Provider.SmallModel
 	}
 	if te.Options.DisableTelemetry != nil && *te.Options.DisableTelemetry {
-		env["DISABLE_TELEMETRY"] = "1"
+		newEnv["DISABLE_TELEMETRY"] = "1"
 	}
 	if te.Options.DisableBetas != nil && *te.Options.DisableBetas {
-		env["CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS"] = "1"
+		newEnv["CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS"] = "1"
 	}
 	if len(te.Provider.Headers) > 0 {
 		b, _ := json.Marshal(te.Provider.Headers)
-		env["ANTHROPIC_CUSTOM_HEADERS"] = string(b)
+		newEnv["ANTHROPIC_CUSTOM_HEADERS"] = string(b)
 	}
-	// Merge custom env vars from the TargetEntry
 	for k, v := range te.Env {
-		env[k] = v
+		newEnv[k] = v
 	}
 
-	envVars := buildEnvVarsArray(env)
+	// --- 4. Merge new entries into the existing map ---
+	for k, v := range newEnv {
+		existingEnv[k] = v
+	}
+
+	// --- 5. Write the merged array back (or remove the key if empty) ---
+	envVars := buildEnvVarsArray(existingEnv)
 	if len(envVars) > 0 {
 		data, err = sjson.SetBytes(data, "claudeCode\\.environmentVariables", envVars)
 		if err != nil {
