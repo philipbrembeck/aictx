@@ -41,6 +41,7 @@ release:
 
 homebrew_casks:
   - name: aictx
+    no_quarantine: true
     binaries:
       - aictx
     repository:
