@@ -97,6 +97,7 @@ aictx
 | `aictx -`                  | Switch back to the previous context                      |
 | `aictx list`               | List all contexts                                        |
 | `aictx add <name>`         | Add a new context (interactive or with flags)            |
+| `aictx copy <src> <name>`  | Copy a context, optionally overriding settings           |
 | `aictx rm <name>`          | Remove a context                                         |
 | `aictx show [name]`        | Show context details (defaults to current)               |
 | `aictx current`            | Print the current context name                           |
@@ -192,6 +193,27 @@ Custom env vars (leave name empty to finish):
 ```
 
 To change headers or env vars after creation, edit `~/.config/aictx/config.yaml` directly.
+
+## Copying a Context
+
+`aictx copy` clones an existing context to a new name. Only the flags you explicitly provide override the copy — everything else is inherited from the source.
+
+```bash
+# Same settings, different API key
+aictx copy falcon another-context --api-key sk-xxx
+
+# Different endpoint and model
+aictx copy falcon staging --endpoint https://staging.api.example.com --model claude-haiku-4-5
+
+# Add env vars on top of what the source already has
+aictx copy prod dev --no-telemetry --env DEBUG=1
+
+# Override only a specific target, leave others untouched
+aictx copy falcon another --api-key sk-xxx --target claude-code-cli
+```
+
+The `--env` and `--header` flags **merge** into the inherited values rather than replacing them.
+API keys are copied to the OS keychain under the new context name automatically.
 
 ## Showing a Context
 
