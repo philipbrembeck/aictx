@@ -200,16 +200,16 @@ To change headers or env vars after creation, edit `~/.config/aictx/config.yaml`
 
 ```bash
 # Same settings, different API key
-aictx copy falcon another-context --api-key sk-xxx
+aictx copy mycontext another-context --api-key sk-xxx
 
 # Different endpoint and model
-aictx copy falcon staging --endpoint https://staging.api.example.com --model claude-haiku-4-5
+aictx copy mycontext staging --endpoint https://staging.api.example.com --model claude-haiku-4-5
 
 # Add env vars on top of what the source already has
 aictx copy prod dev --no-telemetry --env DEBUG=1
 
 # Override only a specific target, leave others untouched
-aictx copy falcon another --api-key sk-xxx --target claude-code-cli
+aictx copy mycontext another --api-key sk-xxx --target claude-code-cli
 ```
 
 The `--env` and `--header` flags **merge** into the inherited values rather than replacing them.
