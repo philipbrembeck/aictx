@@ -28,6 +28,8 @@ go run .
 ## Conventions
 
 - Always commit changes after completing work
+- Always execute tests after making changes
+- Always build a new binary after making changes
 - Use atomic file writes (temp file + rename) for config files
 - VSCode settings: only touch claude-specific keys, preserve everything else (use sjson/gjson)
 - Empty provider = OAuth/native auth mode
