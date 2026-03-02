@@ -101,7 +101,6 @@ aictx
 | `aictx show [name]`        | Show context details (defaults to current)               |
 | `aictx current`            | Print the current context name                           |
 | `aictx discover`           | Detect config from installed tools and save as a context |
-| `aictx env <ctx> <target>` | Manage custom env vars for a target in a context         |
 | `aictx completion <shell>` | Print a shell completion script                          |
 
 ## Switching Contexts
@@ -182,34 +181,17 @@ Provider (leave empty for native auth / OAuth):
   ...
 Options:
   ...
+Custom headers (leave name empty to finish):
+  Header name: X-Proxy-Auth
+  Value: token123
+  Header name:
 Custom env vars (leave name empty to finish):
   Name: OPENAI_API_VERSION
   Value: 2024-02-01
   Name:
 ```
 
-## Managing Custom Env Vars
-
-Use `aictx env` to add or remove custom env vars after a context has been created:
-
-```bash
-aictx env work-project claude-code-cli
-```
-
-Interactive session:
-
-```
-Custom env vars for work-project / claude-code-cli:
-  OPENAI_API_VERSION=2024-02-01
-
-Actions: [a]dd  [r]emove  [q]uit
-Action: a
-  Name: MY_FLAG
-  Value: 1
-  Set MY_FLAG.
-Action: q
-Saved.
-```
+To change headers or env vars after creation, edit `~/.config/aictx/config.yaml` directly.
 
 ## Showing a Context
 
@@ -241,10 +223,10 @@ Tab completion works for context names on `aictx`, `aictx show`, and `aictx rm`.
 
 API keys are stored in the OS keychain — never in plain text on disk:
 
-| Platform | Storage |
-| -------- | ------- |
-| macOS    | Keychain |
-| Linux    | libsecret / GNOME Keyring |
+| Platform | Storage                    |
+| -------- | -------------------------- |
+| macOS    | Keychain                   |
+| Linux    | libsecret / GNOME Keyring  |
 | Windows  | Windows Credential Manager |
 
 The config file (`~/.config/aictx/config.yaml`) stores only metadata: context names, endpoints, models, and options.
