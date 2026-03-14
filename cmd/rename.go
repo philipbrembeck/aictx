@@ -44,16 +44,7 @@ var renameCmd = &cobra.Command{
 			}
 		}
 
-		// Rename the context in-place.
-		ctx.Name = newName
-
-		// Update state references.
-		if cfg.State.Current == oldName {
-			cfg.State.Current = newName
-		}
-		if cfg.State.Previous == oldName {
-			cfg.State.Previous = newName
-		}
+		cfg.RenameContext(oldName, newName)
 
 		// Save — for targets with in-memory API keys, Save will write new
 		// keyring entries under the new context name automatically.
