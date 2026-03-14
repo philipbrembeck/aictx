@@ -157,6 +157,16 @@ func TestRenameContext(t *testing.T) {
 		}
 	})
 
+	t.Run("returns false when old and new names are the same", func(t *testing.T) {
+		cfg := &Config{Contexts: []Context{{Name: "a"}}}
+		if cfg.RenameContext("a", "a") {
+			t.Error("RenameContext returned true, want false")
+		}
+		if cfg.Contexts[0].Name != "a" {
+			t.Errorf("Context name modified unexpectedly: %q", cfg.Contexts[0].Name)
+		}
+	})
+
 	t.Run("returns false when oldName not found", func(t *testing.T) {
 		cfg := &Config{Contexts: []Context{{Name: "a"}}}
 		if cfg.RenameContext("missing", "b") {

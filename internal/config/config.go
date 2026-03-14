@@ -180,6 +180,9 @@ func (c *Config) ContextNames() []string {
 // State.Current/Previous if they referenced oldName.
 // Returns false if oldName is not found or newName already exists.
 func (c *Config) RenameContext(oldName, newName string) bool {
+	if oldName == newName {
+		return false
+	}
 	idx := -1
 	for i := range c.Contexts {
 		switch c.Contexts[i].Name {
