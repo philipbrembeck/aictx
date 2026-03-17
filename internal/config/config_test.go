@@ -43,6 +43,7 @@ func TestDeepCopy(t *testing.T) {
 							APIKey:  "secret",
 							Headers: map[string]string{"X-H": "v"},
 						},
+						Env: map[string]string{"MY_VAR": "original"},
 					},
 				},
 			},
@@ -56,6 +57,7 @@ func TestDeepCopy(t *testing.T) {
 	cp.Contexts[0].Name = "changed"
 	cp.Contexts[0].Targets[0].Provider.APIKey = "changed"
 	cp.Contexts[0].Targets[0].Provider.Headers["X-H"] = "changed"
+	cp.Contexts[0].Targets[0].Env["MY_VAR"] = "changed"
 
 	if orig.State.Current != "ctx1" {
 		t.Errorf("State.Current changed in original")
@@ -68,6 +70,9 @@ func TestDeepCopy(t *testing.T) {
 	}
 	if orig.Contexts[0].Targets[0].Provider.Headers["X-H"] != "v" {
 		t.Errorf("Headers changed in original")
+	}
+	if orig.Contexts[0].Targets[0].Env["MY_VAR"] != "original" {
+		t.Errorf("Env changed in original")
 	}
 }
 
@@ -224,6 +229,49 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 	}
 	if te.Provider.Model != "claude-3" {
 		t.Errorf("Model = %q", te.Provider.Model)
+	}
+}
+
+func TestSaveEnvPersisted(t *testing.T) {
+	setupConfigDir(t)
+
+	cfg := &Config{
+		Contexts: []Context{
+			{
+				Name: "ctx",
+				Targets: []TargetEntry{
+					{
+						ID:  "claude-code-cli",
+						Env: map[string]string{"ANTHROPIC_BASE_URL": "https://proxy.example.com", "FOO": "bar"},
+					},
+				},
+			},
+		},
+	}
+
+	if err := Save(cfg); err != nil {
+		t.Fatalf("Save() error: %v", err)
+	}
+
+	loaded, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	te := loaded.Contexts[0].Targets[0]
+	if len(te.Env) != 2 {
+		t.Fatalf("Env len = %d, want 2 (env vars were dropped by Save)", len(te.Env))
+	}
+	if te.Env["ANTHROPIC_BASE_URL"] != "https://proxy.example.com" {
+		t.Errorf("ANTHROPIC_BASE_URL = %q, want https://proxy.example.com", te.Env["ANTHROPIC_BASE_URL"])
+	}
+	if te.Env["FOO"] != "bar" {
+		t.Errorf("FOO = %q, want bar", te.Env["FOO"])
+	}
+
+	// Env must also remain intact in the caller's in-memory config.
+	if cfg.Contexts[0].Targets[0].Env["FOO"] != "bar" {
+		t.Error("Save() cleared Env from caller's in-memory config")
 	}
 }
 
