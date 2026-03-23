@@ -105,6 +105,7 @@ aictx
 | `aictx list`               | List all contexts                                        |
 | `aictx add <name>`         | Add a new context (interactive or with flags)            |
 | `aictx copy <src> <name>`  | Copy a context, optionally overriding settings           |
+| `aictx rename <old> <new>` | Rename a context (alias: `mv`)                           |
 | `aictx rm <name>`          | Remove a context                                         |
 | `aictx show [name]`        | Show context details (defaults to current)               |
 | `aictx current`            | Print the current context name                           |
@@ -221,6 +222,17 @@ aictx copy mycontext another --api-key sk-xxx --target claude-code-cli
 
 The `--env` and `--header` flags **merge** into the inherited values rather than replacing them.
 API keys are copied to the OS keychain under the new context name automatically.
+
+## Renaming a Context
+
+`aictx rename` (alias: `mv`) renames a context in-place. State references (current/previous) and keyring entries are updated automatically.
+
+```bash
+aictx rename old-name new-name
+aictx mv old-name new-name        # same thing
+```
+
+Errors if the old name does not exist, the new name is already taken, or both names are identical.
 
 ## Showing a Context
 
