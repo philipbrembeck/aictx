@@ -150,6 +150,12 @@ func deepCopy(cfg *Config) *Config {
 					cTe.Provider.Headers[k] = v
 				}
 			}
+			if te.Env != nil {
+				cTe.Env = make(map[string]string, len(te.Env))
+				for k, v := range te.Env {
+					cTe.Env[k] = v
+				}
+			}
 			cCtx.Targets[ti] = cTe
 		}
 		cp.Contexts[ci] = cCtx
