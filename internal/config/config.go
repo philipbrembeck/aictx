@@ -130,6 +130,7 @@ func deepCopy(cfg *Config) *Config {
 		cCtx := Context{
 			Name:        ctx.Name,
 			Description: ctx.Description,
+			Command:     ctx.Command,
 		}
 		cCtx.Targets = make([]TargetEntry, len(ctx.Targets))
 		for ti, te := range ctx.Targets {
