@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/exec"
 
 	"github.com/IQNeoXen/aictx/internal/config"
 	"github.com/IQNeoXen/aictx/internal/picker"
@@ -164,6 +165,21 @@ func switchContext(cfg *config.Config, name string) error {
 	}
 
 	fmt.Printf("Switched to \033[1m%s\033[0m\n", name)
+
+	if ctx.Command != "" {
+		fmt.Printf("Running: %s\n", ctx.Command)
+		shell := os.Getenv("SHELL")
+		if shell == "" {
+			shell = "sh"
+		}
+		c := exec.Command(shell, "-c", ctx.Command)
+		c.Stdout = os.Stdout
+		c.Stderr = os.Stderr
+		if err := c.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "  ! command failed: %v\n", err)
+		}
+	}
+
 	return nil
 }
 

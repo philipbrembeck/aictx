@@ -14,6 +14,7 @@ import (
 var (
 	addTargets     []string
 	addDesc        string
+	addCommand     string
 	addEndpoint    string
 	addAPIKey      string
 	addModel       string
@@ -35,6 +36,7 @@ var addCmd = &cobra.Command{
 func init() {
 	addCmd.Flags().StringArrayVar(&addTargets, "target", nil, "Target to include (repeatable, e.g. claude-code-cli)")
 	addCmd.Flags().StringVar(&addDesc, "description", "", "Context description")
+	addCmd.Flags().StringVar(&addCommand, "command", "", "Shell command to run after switching to this context")
 	addCmd.Flags().StringVar(&addEndpoint, "endpoint", "", "Provider endpoint URL")
 	addCmd.Flags().StringVar(&addAPIKey, "api-key", "", "Provider API key")
 	addCmd.Flags().StringVar(&addModel, "model", "", "Model (e.g. claude-opus-4.6)")
@@ -60,12 +62,13 @@ func addRun(cmd *cobra.Command, args []string) error {
 
 	ctx := config.Context{Name: name}
 
-	flagsProvided := len(addTargets) > 0 || addDesc != "" || addEndpoint != "" ||
+	flagsProvided := len(addTargets) > 0 || addDesc != "" || addCommand != "" || addEndpoint != "" ||
 		addAPIKey != "" || addModel != "" || addSmallModel != "" ||
 		addThinking || addNoTelemetry || addNoBetas || len(addEnv) > 0 || len(addHeaders) > 0
 
 	if flagsProvided {
 		ctx.Description = addDesc
+		ctx.Command = addCommand
 
 		// Build provider and options from flags (same for all targets in flag mode)
 		prov := config.Provider{
@@ -129,6 +132,7 @@ func addRun(cmd *cobra.Command, args []string) error {
 		scanner := bufio.NewScanner(os.Stdin)
 
 		ctx.Description = prompt(scanner, "Description")
+		ctx.Command = prompt(scanner, "Command to run on switch (leave empty to skip)")
 
 		// Target selection
 		fmt.Println("\nAvailable targets:")
