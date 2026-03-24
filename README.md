@@ -156,11 +156,28 @@ aictx add work-project \
   --small-model claude-haiku-4-5 \
   --thinking \
   --no-telemetry \
+  --command "sandbox start" \
   --env OPENAI_API_VERSION=2024-02-01 \
   --env MY_CUSTOM_FLAG=enabled
 ```
 
 The `--env` flag is repeatable and stores arbitrary environment variables alongside the context. They are applied to the target's config on switch and cleaned up on the next switch.
+
+Use `--command` to run a shell command automatically every time this context is selected:
+
+```bash
+aictx add sandbox \
+  --target claude-code-cli \
+  --command "sandbox start"
+
+aictx add work \
+  --target claude-code-cli \
+  --endpoint https://proxy.example.com \
+  --api-key sk-xxx \
+  --command "burn stop"
+```
+
+The command runs via `$SHELL -c` after all targets are applied, and its output is streamed to the terminal.
 
 Use `--header` to pass custom HTTP headers required by LiteLLM proxies or other endpoints (e.g. `X-Proxy-Auth`, `X-Team-ID`). Headers are encoded as a JSON object in the `ANTHROPIC_CUSTOM_HEADERS` environment variable that Claude Code reads natively:
 
@@ -177,6 +194,7 @@ aictx add work-project \
 
 ```txt
 Description: Work proxy config
+Command to run on switch (leave empty to skip): burn stop
 Available targets:
   [1] Claude Code CLI (claude-code-cli) (detected)
   [2] Claude Code for VSCode (claude-code-vscode) (detected)

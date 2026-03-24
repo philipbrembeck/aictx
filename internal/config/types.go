@@ -4,6 +4,7 @@ package config
 type Context struct {
 	Name        string        `yaml:"name"`
 	Description string        `yaml:"description,omitempty"`
+	Command     string        `yaml:"command,omitempty"`
 	Targets     []TargetEntry `yaml:"targets"`
 }
 
