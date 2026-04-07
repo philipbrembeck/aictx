@@ -85,8 +85,10 @@ func TestApply_BasicProvider(t *testing.T) {
 	if !strings.Contains(ext, `"sk-test-key"`) {
 		t.Error("extension missing apiKey")
 	}
-	if !strings.Contains(ext, "registerProvider") {
-		t.Error("extension missing registerProvider call")
+	// Provider name is derived from the endpoint hostname ("aikeys" from aikeys.maibornwolff.de)
+	// so pi does not apply its stored Anthropic OAuth credentials to proxy requests.
+	if !strings.Contains(ext, `"aikeys"`) {
+		t.Error("extension should register under derived provider name, not \"anthropic\"")
 	}
 
 	// Check settings
@@ -94,7 +96,7 @@ func TestApply_BasicProvider(t *testing.T) {
 	if m["defaultModel"] != "claude-sonnet-4-6" {
 		t.Errorf("defaultModel = %v", m["defaultModel"])
 	}
-	if m["defaultProvider"] != "anthropic" {
+	if m["defaultProvider"] != "aikeys" {
 		t.Errorf("defaultProvider = %v", m["defaultProvider"])
 	}
 }
