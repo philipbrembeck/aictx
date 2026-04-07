@@ -20,11 +20,12 @@ type TargetEntry struct {
 // Provider holds abstract connection settings that each target translates
 // into its own config format.
 type Provider struct {
-	Endpoint   string            `yaml:"endpoint,omitempty"`
-	APIKey     string            `yaml:"apiKey,omitempty"`
-	Model      string            `yaml:"model,omitempty"`
-	SmallModel string            `yaml:"smallModel,omitempty"`
-	Headers    map[string]string `yaml:"headers,omitempty"`
+	Endpoint     string            `yaml:"endpoint,omitempty"`
+	APIKey       string            `yaml:"apiKey,omitempty"`
+	Model        string            `yaml:"model,omitempty"`
+	SmallModel   string            `yaml:"smallModel,omitempty"`
+	Headers      map[string]string `yaml:"headers,omitempty"`
+	ProviderType string            `yaml:"providerType,omitempty"` // e.g. "anthropic" (default), "openai"
 }
 
 // IsEmpty returns true if no provider fields are set (i.e. native auth / OAuth).

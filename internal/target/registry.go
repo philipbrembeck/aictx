@@ -3,6 +3,7 @@ package target
 import (
 	"github.com/IQNeoXen/aictx/internal/target/claudecli"
 	"github.com/IQNeoXen/aictx/internal/target/claudevscode"
+	"github.com/IQNeoXen/aictx/internal/target/picli"
 )
 
 // All returns all known targets.
@@ -10,6 +11,7 @@ func All() []Target {
 	return []Target{
 		claudecli.New(),
 		claudevscode.New(),
+		picli.New(),
 	}
 }
 

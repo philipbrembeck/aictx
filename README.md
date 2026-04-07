@@ -10,6 +10,7 @@ Switch between API keys, endpoints, models and other settings across multiple AI
 
 - [x] Claude Code CLI
 - [x] Claude Code for VSCode
+- [x] pi Coding Agent CLI
 - [ ] Roo Code for VSCode
 - [ ] Cline for VSCode
 - [ ] GitHub Copilot CLI

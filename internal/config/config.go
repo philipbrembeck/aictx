@@ -139,10 +139,11 @@ func deepCopy(cfg *Config) *Config {
 				HasKeyringKey: te.HasKeyringKey,
 				Options:       te.Options,
 				Provider: Provider{
-					Endpoint:   te.Provider.Endpoint,
-					APIKey:     te.Provider.APIKey,
-					Model:      te.Provider.Model,
-					SmallModel: te.Provider.SmallModel,
+					Endpoint:     te.Provider.Endpoint,
+					APIKey:       te.Provider.APIKey,
+					Model:        te.Provider.Model,
+					SmallModel:   te.Provider.SmallModel,
+					ProviderType: te.Provider.ProviderType,
 				},
 			}
 			if te.Provider.Headers != nil {
