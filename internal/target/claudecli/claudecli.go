@@ -139,12 +139,12 @@ func (t *Target) Apply(te config.TargetEntry) error {
 	return os.Rename(tmp, path)
 }
 
-func (t *Target) Discover() (*config.TargetEntry, error) {
+func (t *Target) Discover() (*config.DiscoveryResult, error) {
 	data, err := os.ReadFile(t.settingsPath())
 	if err != nil {
 		if os.IsNotExist(err) {
 			// No settings.json but target is detected (OAuth mode)
-			return &config.TargetEntry{ID: ID}, nil
+			return &config.DiscoveryResult{ID: ID}, nil
 		}
 		return nil, fmt.Errorf("reading claude settings: %w", err)
 	}
@@ -154,7 +154,7 @@ func (t *Target) Discover() (*config.TargetEntry, error) {
 		return nil, fmt.Errorf("parsing claude settings: %w", err)
 	}
 
-	te := &config.TargetEntry{ID: ID}
+	dr := &config.DiscoveryResult{ID: ID}
 
 	if envRaw, ok := raw["env"].(map[string]interface{}); ok {
 		for k, v := range envRaw {
@@ -164,41 +164,31 @@ func (t *Target) Discover() (*config.TargetEntry, error) {
 			}
 			switch k {
 			case "ANTHROPIC_BASE_URL":
-				te.Provider.Endpoint = s
+				dr.Provider.Endpoint = s
 			case "ANTHROPIC_AUTH_TOKEN":
-				te.Provider.APIKey = s
+				dr.Provider.APIKey = s
 			case "ANTHROPIC_MODEL":
-				te.Provider.Model = s
+				dr.Provider.Model = s
 			case "ANTHROPIC_DEFAULT_HAIKU_MODEL":
-				te.Provider.SmallModel = s
-			case "DISABLE_TELEMETRY":
-				if s == "1" {
-					b := true
-					te.Options.DisableTelemetry = &b
-				}
-			case "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS":
-				if s == "1" {
-					b := true
-					te.Options.DisableBetas = &b
-				}
+				dr.Provider.SmallModel = s
 			case "ANTHROPIC_CUSTOM_HEADERS":
 				var headers map[string]string
 				if jsonErr := json.Unmarshal([]byte(s), &headers); jsonErr == nil {
-					te.Provider.Headers = headers
+					dr.Provider.Headers = headers
 				}
+			case "DISABLE_TELEMETRY", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS":
+				// Options are context-level; skip during discovery.
 			default:
 				// Collect unrecognized keys as custom env vars
-				if te.Env == nil {
-					te.Env = map[string]string{}
+				if dr.Env == nil {
+					dr.Env = map[string]string{}
 				}
-				te.Env[k] = s
+				dr.Env[k] = s
 			}
 		}
 	}
 
-	if thinking, ok := raw["alwaysThinkingEnabled"].(bool); ok {
-		te.Options.AlwaysThinking = &thinking
-	}
+	// alwaysThinkingEnabled is an Options field (context-level); skip during discovery.
 
-	return te, nil
+	return dr, nil
 }

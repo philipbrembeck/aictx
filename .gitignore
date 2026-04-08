@@ -1,3 +1,9 @@
+# harness stuff
+.agents/
+.claude/
+docs/
+skills-lock.json
+
 # Binary
 aictx
 dist/

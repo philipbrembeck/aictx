@@ -31,6 +31,8 @@ the source context. Use flags to override individual fields in the copy.
 
 Only explicitly provided flags override the source — everything else is
 preserved as-is. --env and --header flags merge into the inherited values.
+--target restricts which targets receive --env overrides; provider and options
+flags always apply at the context level.
 
 Examples:
   aictx copy falcon another-context --api-key sk-xxx
@@ -42,16 +44,16 @@ Examples:
 }
 
 func init() {
-	copyCmd.Flags().StringArrayVar(&copyTargets, "target", nil, "Restrict overrides to these target IDs (repeatable); default: all targets")
+	copyCmd.Flags().StringArrayVar(&copyTargets, "target", nil, "Restrict --env overrides to these target IDs (repeatable)")
 	copyCmd.Flags().StringVar(&copyDesc, "description", "", "Override description")
 	copyCmd.Flags().StringVar(&copyEndpoint, "endpoint", "", "Override provider endpoint URL")
 	copyCmd.Flags().StringVar(&copyAPIKey, "api-key", "", "Override provider API key")
-	copyCmd.Flags().StringVar(&copyModel, "model", "", "Override model (e.g. claude-opus-4.6)")
-	copyCmd.Flags().StringVar(&copySmallModel, "small-model", "", "Override small/cheap model (e.g. claude-haiku-4.5)")
+	copyCmd.Flags().StringVar(&copyModel, "model", "", "Override model (e.g. claude-opus-4-6)")
+	copyCmd.Flags().StringVar(&copySmallModel, "small-model", "", "Override small/cheap model (e.g. claude-haiku-4-5)")
 	copyCmd.Flags().BoolVar(&copyThinking, "thinking", false, "Enable always thinking")
 	copyCmd.Flags().BoolVar(&copyNoTelemetry, "no-telemetry", false, "Disable telemetry")
 	copyCmd.Flags().BoolVar(&copyNoBetas, "no-betas", false, "Disable experimental betas")
-	copyCmd.Flags().StringArrayVar(&copyEnv, "env", nil, "Merge env variable as KEY=VALUE (repeatable)")
+	copyCmd.Flags().StringArrayVar(&copyEnv, "env", nil, "Merge env variable as KEY=VALUE into target(s) (repeatable)")
 	copyCmd.Flags().StringArrayVar(&copyHeaders, "header", nil, "Merge custom HTTP header as Key:Value (repeatable)")
 }
 
@@ -107,58 +109,56 @@ func copyRun(cmd *cobra.Command, args []string) error {
 		dst.Description = copyDesc
 	}
 
-	// Apply flag overrides to each target entry
-	for i := range dst.Targets {
-		te := &dst.Targets[i]
+	// Apply context-level provider/options flag overrides.
+	if cmd.Flags().Changed("endpoint") {
+		dst.Provider.Endpoint = copyEndpoint
+	}
+	if cmd.Flags().Changed("api-key") {
+		dst.Provider.APIKey = copyAPIKey
+		dst.HasKeyringKey = false // will be set by Save
+	}
+	if cmd.Flags().Changed("model") {
+		dst.Provider.Model = copyModel
+	}
+	if cmd.Flags().Changed("small-model") {
+		dst.Provider.SmallModel = copySmallModel
+	}
+	if cmd.Flags().Changed("thinking") {
+		b := copyThinking
+		dst.Options.AlwaysThinking = &b
+	}
+	if cmd.Flags().Changed("no-telemetry") {
+		b := copyNoTelemetry
+		dst.Options.DisableTelemetry = &b
+	}
+	if cmd.Flags().Changed("no-betas") {
+		b := copyNoBetas
+		dst.Options.DisableBetas = &b
+	}
 
-		// Skip targets not in the --target filter (if any filter specified)
-		if len(copyTargets) > 0 && !containsString(copyTargets, te.ID) {
-			continue
+	// Merge header overrides at context level.
+	if len(headerOverrides) > 0 {
+		if dst.Provider.Headers == nil {
+			dst.Provider.Headers = map[string]string{}
 		}
+		for k, v := range headerOverrides {
+			dst.Provider.Headers[k] = v
+		}
+	}
 
-		if cmd.Flags().Changed("endpoint") {
-			te.Provider.Endpoint = copyEndpoint
-		}
-		if cmd.Flags().Changed("api-key") {
-			te.Provider.APIKey = copyAPIKey
-			te.HasKeyringKey = false // will be set by Save
-		}
-		if cmd.Flags().Changed("model") {
-			te.Provider.Model = copyModel
-		}
-		if cmd.Flags().Changed("small-model") {
-			te.Provider.SmallModel = copySmallModel
-		}
-		if cmd.Flags().Changed("thinking") {
-			b := copyThinking
-			te.Options.AlwaysThinking = &b
-		}
-		if cmd.Flags().Changed("no-telemetry") {
-			b := copyNoTelemetry
-			te.Options.DisableTelemetry = &b
-		}
-		if cmd.Flags().Changed("no-betas") {
-			b := copyNoBetas
-			te.Options.DisableBetas = &b
-		}
-
-		// Merge env overrides
-		if len(envOverrides) > 0 {
+	// Apply --env overrides to target entries (scoped by --target filter).
+	if len(envOverrides) > 0 {
+		for i := range dst.Targets {
+			te := &dst.Targets[i]
+			// Skip targets not in the --target filter (if any filter specified)
+			if len(copyTargets) > 0 && !containsString(copyTargets, te.ID) {
+				continue
+			}
 			if te.Env == nil {
 				te.Env = map[string]string{}
 			}
 			for k, v := range envOverrides {
 				te.Env[k] = v
-			}
-		}
-
-		// Merge header overrides
-		if len(headerOverrides) > 0 {
-			if te.Provider.Headers == nil {
-				te.Provider.Headers = map[string]string{}
-			}
-			for k, v := range headerOverrides {
-				te.Provider.Headers[k] = v
 			}
 		}
 	}
@@ -174,29 +174,25 @@ func copyRun(cmd *cobra.Command, args []string) error {
 
 func deepCopyContext(src config.Context) config.Context {
 	dst := config.Context{
-		Name:        src.Name,
-		Description: src.Description,
-		Targets:     make([]config.TargetEntry, len(src.Targets)),
-	}
-	for i, te := range src.Targets {
-		dst.Targets[i] = deepCopyTargetEntry(te)
-	}
-	return dst
-}
-
-func deepCopyTargetEntry(src config.TargetEntry) config.TargetEntry {
-	dst := config.TargetEntry{
-		ID:            src.ID,
+		Name:          src.Name,
+		Description:   src.Description,
+		Command:       src.Command,
 		HasKeyringKey: src.HasKeyringKey,
+		Options:       src.Options,
 		Provider: config.Provider{
-			Endpoint:   src.Provider.Endpoint,
-			APIKey:     src.Provider.APIKey,
-			Model:      src.Provider.Model,
-			SmallModel: src.Provider.SmallModel,
+			Endpoint:     src.Provider.Endpoint,
+			APIKey:       src.Provider.APIKey,
+			Model:        src.Provider.Model,
+			SmallModel:   src.Provider.SmallModel,
+			ProviderType: src.Provider.ProviderType,
 		},
-		Options: config.Options{},
 	}
-
+	if src.Provider.Headers != nil {
+		dst.Provider.Headers = make(map[string]string, len(src.Provider.Headers))
+		for k, v := range src.Provider.Headers {
+			dst.Provider.Headers[k] = v
+		}
+	}
 	// Deep copy pointer-to-bool options
 	if src.Options.AlwaysThinking != nil {
 		b := *src.Options.AlwaysThinking
@@ -210,21 +206,21 @@ func deepCopyTargetEntry(src config.TargetEntry) config.TargetEntry {
 		b := *src.Options.DisableBetas
 		dst.Options.DisableBetas = &b
 	}
-
-	// Deep copy maps
-	if len(src.Provider.Headers) > 0 {
-		dst.Provider.Headers = make(map[string]string, len(src.Provider.Headers))
-		for k, v := range src.Provider.Headers {
-			dst.Provider.Headers[k] = v
-		}
+	dst.Targets = make([]config.TargetEntry, len(src.Targets))
+	for i, te := range src.Targets {
+		dst.Targets[i] = deepCopyTargetEntry(te)
 	}
-	if len(src.Env) > 0 {
+	return dst
+}
+
+func deepCopyTargetEntry(src config.TargetEntry) config.TargetEntry {
+	dst := config.TargetEntry{ID: src.ID}
+	if src.Env != nil {
 		dst.Env = make(map[string]string, len(src.Env))
 		for k, v := range src.Env {
 			dst.Env[k] = v
 		}
 	}
-
 	return dst
 }
 

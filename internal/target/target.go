@@ -16,7 +16,7 @@ type Target interface {
 	// Apply writes the given target entry's config into this target.
 	Apply(te config.TargetEntry) error
 
-	// Discover reads the target's current config and returns a TargetEntry.
+	// Discover reads the target's current config and returns a DiscoveryResult.
 	// Returns nil if nothing useful is found.
-	Discover() (*config.TargetEntry, error)
+	Discover() (*config.DiscoveryResult, error)
 }

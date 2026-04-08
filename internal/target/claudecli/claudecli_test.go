@@ -251,15 +251,15 @@ func TestDiscover_MissingFile(t *testing.T) {
 	tgt := setupClaude(t)
 	// Don't write a settings.json — only dir exists.
 
-	te, err := tgt.Discover()
+	dr, err := tgt.Discover()
 	if err != nil {
 		t.Fatalf("Discover() error: %v", err)
 	}
-	if te == nil {
-		t.Fatal("Discover() returned nil TargetEntry")
+	if dr == nil {
+		t.Fatal("Discover() returned nil DiscoveryResult")
 	}
-	if te.ID != ID {
-		t.Errorf("ID = %q, want %q", te.ID, ID)
+	if dr.ID != ID {
+		t.Errorf("ID = %q, want %q", dr.ID, ID)
 	}
 }
 
@@ -277,27 +277,29 @@ func TestDiscover_FullSettings(t *testing.T) {
 	}`
 	writeSettings(t, tgt, content)
 
-	te, err := tgt.Discover()
+	dr, err := tgt.Discover()
 	if err != nil {
 		t.Fatalf("Discover() error: %v", err)
 	}
-	if te.Provider.Endpoint != "https://custom.api" {
-		t.Errorf("Endpoint = %q", te.Provider.Endpoint)
+	if dr.Provider.Endpoint != "https://custom.api" {
+		t.Errorf("Endpoint = %q", dr.Provider.Endpoint)
 	}
-	if te.Provider.APIKey != "sk-abc" {
-		t.Errorf("APIKey = %q", te.Provider.APIKey)
+	if dr.Provider.APIKey != "sk-abc" {
+		t.Errorf("APIKey = %q", dr.Provider.APIKey)
 	}
-	if te.Provider.Model != "claude-opus" {
-		t.Errorf("Model = %q", te.Provider.Model)
+	if dr.Provider.Model != "claude-opus" {
+		t.Errorf("Model = %q", dr.Provider.Model)
 	}
-	if te.Provider.SmallModel != "claude-haiku" {
-		t.Errorf("SmallModel = %q", te.Provider.SmallModel)
+	if dr.Provider.SmallModel != "claude-haiku" {
+		t.Errorf("SmallModel = %q", dr.Provider.SmallModel)
 	}
-	if te.Options.DisableTelemetry == nil || !*te.Options.DisableTelemetry {
-		t.Error("DisableTelemetry not set")
+	// DISABLE_TELEMETRY and DISABLE_BETAS are Options-level; they are skipped in Discover().
+	// They must NOT appear in dr.Env.
+	if _, ok := dr.Env["DISABLE_TELEMETRY"]; ok {
+		t.Error("DISABLE_TELEMETRY should not appear in DiscoveryResult.Env")
 	}
-	if te.Options.DisableBetas == nil || !*te.Options.DisableBetas {
-		t.Error("DisableBetas not set")
+	if _, ok := dr.Env["CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS"]; ok {
+		t.Error("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS should not appear in DiscoveryResult.Env")
 	}
 }
 
@@ -305,24 +307,26 @@ func TestDiscover_CustomEnv(t *testing.T) {
 	tgt := setupClaude(t)
 	writeSettings(t, tgt, `{"env": {"MY_CUSTOM_VAR": "hello"}}`)
 
-	te, err := tgt.Discover()
+	dr, err := tgt.Discover()
 	if err != nil {
 		t.Fatalf("Discover() error: %v", err)
 	}
-	if te.Env["MY_CUSTOM_VAR"] != "hello" {
-		t.Errorf("custom env MY_CUSTOM_VAR = %q, want hello", te.Env["MY_CUSTOM_VAR"])
+	if dr.Env["MY_CUSTOM_VAR"] != "hello" {
+		t.Errorf("custom env MY_CUSTOM_VAR = %q, want hello", dr.Env["MY_CUSTOM_VAR"])
 	}
 }
 
-func TestDiscover_AlwaysThinking(t *testing.T) {
+func TestDiscover_AlwaysThinkingSkipped(t *testing.T) {
 	tgt := setupClaude(t)
+	// alwaysThinkingEnabled is an Options field (context-level); Discover() skips it.
 	writeSettings(t, tgt, `{"alwaysThinkingEnabled": true}`)
 
-	te, err := tgt.Discover()
+	dr, err := tgt.Discover()
 	if err != nil {
 		t.Fatalf("Discover() error: %v", err)
 	}
-	if te.Options.AlwaysThinking == nil || !*te.Options.AlwaysThinking {
-		t.Error("AlwaysThinking not set after Discover")
+	// DiscoveryResult has no Options; verify the result is non-nil and has the right ID.
+	if dr == nil || dr.ID != ID {
+		t.Errorf("unexpected Discover() result: %v", dr)
 	}
 }

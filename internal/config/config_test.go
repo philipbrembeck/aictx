@@ -36,13 +36,13 @@ func TestDeepCopy(t *testing.T) {
 		Contexts: []Context{
 			{
 				Name: "ctx1",
+				Provider: Provider{
+					APIKey:  "secret",
+					Headers: map[string]string{"X-H": "v"},
+				},
 				Targets: []TargetEntry{
 					{
-						ID: "tgt1",
-						Provider: Provider{
-							APIKey:  "secret",
-							Headers: map[string]string{"X-H": "v"},
-						},
+						ID:  "tgt1",
 						Env: map[string]string{"MY_VAR": "original"},
 					},
 				},
@@ -55,8 +55,8 @@ func TestDeepCopy(t *testing.T) {
 	// Mutate copy — original must be unaffected.
 	cp.State.Current = "changed"
 	cp.Contexts[0].Name = "changed"
-	cp.Contexts[0].Targets[0].Provider.APIKey = "changed"
-	cp.Contexts[0].Targets[0].Provider.Headers["X-H"] = "changed"
+	cp.Contexts[0].Provider.APIKey = "changed"
+	cp.Contexts[0].Provider.Headers["X-H"] = "changed"
 	cp.Contexts[0].Targets[0].Env["MY_VAR"] = "changed"
 
 	if orig.State.Current != "ctx1" {
@@ -65,10 +65,10 @@ func TestDeepCopy(t *testing.T) {
 	if orig.Contexts[0].Name != "ctx1" {
 		t.Errorf("Contexts[0].Name changed in original")
 	}
-	if orig.Contexts[0].Targets[0].Provider.APIKey != "secret" {
+	if orig.Contexts[0].Provider.APIKey != "secret" {
 		t.Errorf("APIKey changed in original")
 	}
-	if orig.Contexts[0].Targets[0].Provider.Headers["X-H"] != "v" {
+	if orig.Contexts[0].Provider.Headers["X-H"] != "v" {
 		t.Errorf("Headers changed in original")
 	}
 	if orig.Contexts[0].Targets[0].Env["MY_VAR"] != "original" {
@@ -253,14 +253,12 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 			{
 				Name:        "prod",
 				Description: "production",
+				Provider: Provider{
+					Endpoint: "https://api.example.com",
+					Model:    "claude-3",
+				},
 				Targets: []TargetEntry{
-					{
-						ID: "claude-code-cli",
-						Provider: Provider{
-							Endpoint: "https://api.example.com",
-							Model:    "claude-3",
-						},
-					},
+					{ID: "claude-code-cli"},
 				},
 			},
 		},
@@ -285,15 +283,14 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 	if ctx.Name != "prod" || ctx.Description != "production" {
 		t.Errorf("Context = %+v", ctx)
 	}
-	if len(ctx.Targets) != 1 {
-		t.Fatalf("len(Targets) = %d, want 1", len(ctx.Targets))
+	if ctx.Provider.Endpoint != "https://api.example.com" {
+		t.Errorf("Endpoint = %q", ctx.Provider.Endpoint)
 	}
-	te := ctx.Targets[0]
-	if te.Provider.Endpoint != "https://api.example.com" {
-		t.Errorf("Endpoint = %q", te.Provider.Endpoint)
+	if ctx.Provider.Model != "claude-3" {
+		t.Errorf("Model = %q", ctx.Provider.Model)
 	}
-	if te.Provider.Model != "claude-3" {
-		t.Errorf("Model = %q", te.Provider.Model)
+	if len(ctx.Targets) != 1 || ctx.Targets[0].ID != "claude-code-cli" {
+		t.Errorf("Targets = %v", ctx.Targets)
 	}
 }
 
@@ -346,10 +343,9 @@ func TestSaveAPIKeyScrubbed(t *testing.T) {
 	cfg := &Config{
 		Contexts: []Context{
 			{
-				Name: "ctx",
-				Targets: []TargetEntry{
-					{ID: "claude-code-cli", Provider: Provider{APIKey: "sk-secret"}},
-				},
+				Name:     "ctx",
+				Provider: Provider{APIKey: "sk-secret"},
+				Targets:  []TargetEntry{{ID: "claude-code-cli"}},
 			},
 		},
 	}
@@ -368,7 +364,7 @@ func TestSaveAPIKeyScrubbed(t *testing.T) {
 	}
 
 	// The in-memory config must still have the key for Apply().
-	if cfg.Contexts[0].Targets[0].Provider.APIKey != "sk-secret" {
+	if cfg.Contexts[0].Provider.APIKey != "sk-secret" {
 		t.Error("Save() cleared APIKey from caller's in-memory config")
 	}
 }
@@ -376,7 +372,7 @@ func TestSaveAPIKeyScrubbed(t *testing.T) {
 func TestLoadKeyringMigration(t *testing.T) {
 	setupConfigDir(t)
 
-	// Write a YAML file with a plain-text API key (old format).
+	// Write a YAML file with a plain-text API key (old per-target format).
 	dir := Dir()
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
@@ -394,15 +390,16 @@ contexts:
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	// First Load: migrates the plain-text key to keyring, clears it from YAML.
+	// First Load: migrates the plain-text key from target to context level,
+	// then stores it in the OS keyring.
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
 
-	// HasKeyringKey should be set after migration.
-	if !cfg.Contexts[0].Targets[0].HasKeyringKey {
-		t.Error("HasKeyringKey not set after migration")
+	// HasKeyringKey should be set at context level after migration.
+	if !cfg.Contexts[0].HasKeyringKey {
+		t.Error("HasKeyringKey not set at context level after migration")
 	}
 	// YAML on disk should no longer have the plain key.
 	data, err := os.ReadFile(Path())
@@ -413,14 +410,100 @@ contexts:
 		t.Error("plain-text API key still present in YAML after migration")
 	}
 
-	// Second Load: HasKeyringKey=true → key is loaded from keyring into memory.
+	// Second Load: HasKeyringKey=true at context level → key is loaded from keyring into memory.
 	cfg2, err := Load()
 	if err != nil {
 		t.Fatalf("second Load() error: %v", err)
 	}
-	if cfg2.Contexts[0].Targets[0].Provider.APIKey != "plain-text-key" {
-		t.Errorf("APIKey = %q on second load, want plain-text-key", cfg2.Contexts[0].Targets[0].Provider.APIKey)
+	if cfg2.Contexts[0].Provider.APIKey != "plain-text-key" {
+		t.Errorf("APIKey = %q on second load, want plain-text-key", cfg2.Contexts[0].Provider.APIKey)
 	}
+}
+
+// TestMigrateV1 covers the key migration scenarios.
+func TestMigrateV1(t *testing.T) {
+	t.Run("lifts provider and options from first non-empty target", func(t *testing.T) {
+		setupConfigDir(t)
+
+		dir := Dir()
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatalf("MkdirAll: %v", err)
+		}
+		// Old format: provider at target level
+		yamlContent := `state:
+  current: work
+contexts:
+  - name: work
+    targets:
+      - id: claude-code-cli
+        provider:
+          endpoint: https://api.example.com
+          model: claude-opus-4-6
+        options:
+          alwaysThinking: true
+      - id: claude-code-vscode
+        provider:
+          endpoint: https://api.example.com
+          model: claude-opus-4-6
+        options:
+          alwaysThinking: true
+`
+		if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte(yamlContent), 0644); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load() error: %v", err)
+		}
+
+		ctx := cfg.Contexts[0]
+		if ctx.Provider.Endpoint != "https://api.example.com" {
+			t.Errorf("Provider.Endpoint = %q, want https://api.example.com", ctx.Provider.Endpoint)
+		}
+		if ctx.Provider.Model != "claude-opus-4-6" {
+			t.Errorf("Provider.Model = %q, want claude-opus-4-6", ctx.Provider.Model)
+		}
+		if ctx.Options.AlwaysThinking == nil || !*ctx.Options.AlwaysThinking {
+			t.Error("Options.AlwaysThinking not lifted to context level")
+		}
+		// Per-target provider should be cleared after migration.
+		for _, te := range ctx.Targets {
+			if !te.Provider.IsEmpty() {
+				t.Errorf("target %s still has per-target provider after migration", te.ID)
+			}
+		}
+	})
+
+	t.Run("already-migrated config is a no-op", func(t *testing.T) {
+		setupConfigDir(t)
+
+		// Config already in new format (provider at context level)
+		cfg := &Config{
+			Contexts: []Context{
+				{
+					Name:     "work",
+					Provider: Provider{Endpoint: "https://api.example.com", Model: "claude-opus-4-6"},
+					Targets:  []TargetEntry{{ID: "claude-code-cli"}},
+				},
+			},
+		}
+		if err := Save(cfg); err != nil {
+			t.Fatalf("Save: %v", err)
+		}
+
+		loaded, err := Load()
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if loaded.Contexts[0].Provider.Endpoint != "https://api.example.com" {
+			t.Errorf("Provider lost after load of already-migrated config")
+		}
+		// Targets should still just have ID only.
+		if !loaded.Contexts[0].Targets[0].Provider.IsEmpty() {
+			t.Error("target has unexpected provider after loading already-migrated config")
+		}
+	})
 }
 
 func contains(data []byte, s string) bool {

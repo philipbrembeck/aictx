@@ -212,19 +212,15 @@ func (t *Target) applySettings(te config.TargetEntry) error {
 	return os.Rename(tmp, path)
 }
 
-func (t *Target) Discover() (*config.TargetEntry, error) {
-	te := &config.TargetEntry{ID: ID}
+func (t *Target) Discover() (*config.DiscoveryResult, error) {
+	dr := &config.DiscoveryResult{ID: ID}
 
-	// Read settings.json for model/thinking
+	// Read settings.json for model (thinking is Options-level, skip during discovery)
 	if raw, err := os.ReadFile(t.settingsPath()); err == nil {
 		var settings map[string]interface{}
 		if jsonErr := json.Unmarshal(raw, &settings); jsonErr == nil {
 			if m, ok := settings["defaultModel"].(string); ok {
-				te.Provider.Model = m
-			}
-			if lvl, ok := settings["defaultThinkingLevel"].(string); ok && lvl != "off" && lvl != "" {
-				b := true
-				te.Options.AlwaysThinking = &b
+				dr.Provider.Model = m
 			}
 		}
 	}
@@ -232,22 +228,22 @@ func (t *Target) Discover() (*config.TargetEntry, error) {
 	// Read extension file for endpoint/apiKey
 	extData, err := os.ReadFile(t.extensionPath())
 	if err == nil {
-		t.parseExtension(string(extData), te)
+		t.parseExtension(string(extData), dr)
 	}
 
-	return te, nil
+	return dr, nil
 }
 
 // parseExtension does a best-effort extraction of baseUrl and apiKey from
 // the generated extension file.
-func (t *Target) parseExtension(source string, te *config.TargetEntry) {
+func (t *Target) parseExtension(source string, dr *config.DiscoveryResult) {
 	// Look for baseUrl: "..."
 	if v := extractTSString(source, "baseUrl"); v != "" {
-		te.Provider.Endpoint = v
+		dr.Provider.Endpoint = v
 	}
 	// Look for apiKey: "..."
 	if v := extractTSString(source, "apiKey"); v != "" {
-		te.Provider.APIKey = v
+		dr.Provider.APIKey = v
 	}
 }
 

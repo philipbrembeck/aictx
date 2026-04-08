@@ -35,27 +35,20 @@ var renameCmd = &cobra.Command{
 			return fmt.Errorf("context %q already exists", newName)
 		}
 
-		// Track which targets have keyring entries so we can delete the old
-		// ones after Save writes them under the new name.
-		var keyringTargets []string
-		for _, te := range ctx.Targets {
-			if te.HasKeyringKey {
-				keyringTargets = append(keyringTargets, te.ID)
-			}
-		}
+		hasKeyring := ctx.HasKeyringKey
 
 		cfg.RenameContext(oldName, newName)
 
-		// Save — for targets with in-memory API keys, Save will write new
+		// Save — for contexts with in-memory API keys, Save will write new
 		// keyring entries under the new context name automatically.
 		if err := config.Save(cfg); err != nil {
 			return err
 		}
 
-		// Delete stale keyring entries stored under the old name.
-		for _, tid := range keyringTargets {
-			if kerr := keyring.Delete(oldName, tid); kerr != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "aictx: warning: could not delete old keychain entry for %s/%s: %v\n", oldName, tid, kerr)
+		// Delete the stale keyring entry stored under the old name.
+		if hasKeyring {
+			if kerr := keyring.Delete(oldName); kerr != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "aictx: warning: could not delete old keychain entry for %s: %v\n", oldName, kerr)
 			}
 		}
 

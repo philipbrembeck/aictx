@@ -53,6 +53,30 @@ Migration is **automatic and transparent**. On first run after upgrading, `aictx
 
 If targets had different API keys, a warning is printed to stderr and the first non-empty key is kept. Re-run `aictx copy <ctx> <ctx> --api-key <new-key>` to update.
 
+#### Back up your API keys before upgrading
+
+The migration moves keyring entries automatically, but if something goes wrong you want your keys handy. Run this before upgrading:
+
+```sh
+#!/usr/bin/env sh
+# Dumps all aictx keyring entries to stdout so you can save them somewhere safe.
+# Requires the `security` CLI (macOS) or equivalent for your platform.
+
+echo "=== aictx keyring backup ==="
+# List all entries for the aictx service and print account + password
+security find-generic-password -s aictx 2>/dev/null | grep "acct" | while read -r line; do
+  account=$(echo "$line" | sed 's/.*"acct"<blob>="\(.*\)"/\1/')
+  password=$(security find-generic-password -s aictx -a "$account" -w 2>/dev/null)
+  echo "account=$account  key=$password"
+done
+```
+
+Save the output somewhere safe (e.g. a local file or password manager note). After migration you can verify the new entries with:
+
+```sh
+security find-generic-password -s aictx -w  # single context-level entry
+```
+
 ### New features
 
 - **`aictx targets [contextname]`** — Checkbox multi-select picker to add or remove targets from a context. Pre-checks currently configured targets; detected targets are labelled. Falls back to a plain list when stdout is not a terminal.

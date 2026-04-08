@@ -152,14 +152,14 @@ func PickMulti(items []string, initialSelected []bool) ([]bool, error) {
 
 		switch {
 		case n == 1 && buf[0] == 13: // Enter
-			// Clear list + hint line
-			clearList(len(items) + 1)
+			// Clear items + blank + hint lines
+			clearList(len(items) + 2)
 			return selected, nil
 		case n == 1 && (buf[0] == 3 || buf[0] == 27): // Ctrl-C or bare Esc
-			clearList(len(items) + 1)
+			clearList(len(items) + 2)
 			return nil, nil
 		case n == 1 && buf[0] == 'q': // q to quit
-			clearList(len(items) + 1)
+			clearList(len(items) + 2)
 			return nil, nil
 		case n == 1 && buf[0] == ' ': // Space — toggle
 			selected[cursor] = !selected[cursor]
@@ -186,8 +186,8 @@ func PickMulti(items []string, initialSelected []bool) ([]bool, error) {
 			continue
 		}
 
-		// Re-render: move back to top of list (items + hint line)
-		fmt.Printf("\033[%dA", len(items)+1)
+		// Re-render: move back to top of list (N items + blank line + hint = N+2 lines down)
+		fmt.Printf("\033[%dA", len(items)+2)
 		renderMulti(items, selected, cursor)
 		fmt.Print("\r\n  \033[2m↑/↓ move   Space toggle   Enter confirm   Esc cancel\033[0m\r\n")
 	}

@@ -148,7 +148,7 @@ func (t *Target) Apply(te config.TargetEntry) error {
 	return t.writeSettings(data)
 }
 
-func (t *Target) Discover() (*config.TargetEntry, error) {
+func (t *Target) Discover() (*config.DiscoveryResult, error) {
 	data, err := t.readSettings()
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -157,7 +157,7 @@ func (t *Target) Discover() (*config.TargetEntry, error) {
 		return nil, fmt.Errorf("reading vscode settings: %w", err)
 	}
 
-	te := &config.TargetEntry{ID: ID}
+	dr := &config.DiscoveryResult{ID: ID}
 
 	envArr := gjson.GetBytes(data, `claudeCode\.environmentVariables`)
 	if envArr.Exists() && envArr.IsArray() {
@@ -166,45 +166,37 @@ func (t *Target) Discover() (*config.TargetEntry, error) {
 			val := value.Get("value").String()
 			switch name {
 			case "ANTHROPIC_BASE_URL":
-				te.Provider.Endpoint = val
+				dr.Provider.Endpoint = val
 			case "ANTHROPIC_AUTH_TOKEN":
-				te.Provider.APIKey = val
+				dr.Provider.APIKey = val
 			case "ANTHROPIC_MODEL":
-				te.Provider.Model = val
+				dr.Provider.Model = val
 			case "ANTHROPIC_DEFAULT_HAIKU_MODEL":
-				te.Provider.SmallModel = val
-			case "DISABLE_TELEMETRY":
-				if val == "1" {
-					b := true
-					te.Options.DisableTelemetry = &b
-				}
-			case "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS":
-				if val == "1" {
-					b := true
-					te.Options.DisableBetas = &b
-				}
+				dr.Provider.SmallModel = val
 			case "ANTHROPIC_CUSTOM_HEADERS":
 				var headers map[string]string
 				if jsonErr := json.Unmarshal([]byte(val), &headers); jsonErr == nil {
-					te.Provider.Headers = headers
+					dr.Provider.Headers = headers
 				}
+			case "DISABLE_TELEMETRY", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS":
+				// Options are context-level; skip during discovery.
 			default:
 				// Collect unrecognized entries as custom env vars
-				if te.Env == nil {
-					te.Env = map[string]string{}
+				if dr.Env == nil {
+					dr.Env = map[string]string{}
 				}
-				te.Env[name] = val
+				dr.Env[name] = val
 			}
 			return true
 		})
 	}
 
 	model := gjson.GetBytes(data, `claudeCode\.selectedModel`)
-	if model.Exists() && te.Provider.Model == "" {
-		te.Provider.Model = model.String()
+	if model.Exists() && dr.Provider.Model == "" {
+		dr.Provider.Model = model.String()
 	}
 
-	return te, nil
+	return dr, nil
 }
 
 type envVar struct {

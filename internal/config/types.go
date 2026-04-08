@@ -2,19 +2,32 @@ package config
 
 // Context represents a named AI tool configuration.
 type Context struct {
-	Name        string        `yaml:"name"`
-	Description string        `yaml:"description,omitempty"`
-	Command     string        `yaml:"command,omitempty"`
-	Targets     []TargetEntry `yaml:"targets"`
+	Name          string        `yaml:"name"`
+	Description   string        `yaml:"description,omitempty"`
+	Command       string        `yaml:"command,omitempty"`
+	Provider      Provider      `yaml:"provider,omitempty"`
+	Options       Options       `yaml:"options,omitempty"`
+	HasKeyringKey bool          `yaml:"hasKeyringKey,omitempty"`
+	Targets       []TargetEntry `yaml:"targets"`
 }
 
-// TargetEntry specifies a target and its configuration.
+// TargetEntry specifies a target included in a context.
+// Provider, Options, and HasKeyringKey are context-level in the new format and will
+// be empty here; they are kept on the struct so that Apply() callers can pass an
+// effective merged entry without changing the Apply signature.
 type TargetEntry struct {
 	ID            string            `yaml:"id"`
 	Provider      Provider          `yaml:"provider,omitempty"`
 	Options       Options           `yaml:"options,omitempty"`
-	Env           map[string]string `yaml:"env,omitempty"`
 	HasKeyringKey bool              `yaml:"hasKeyringKey,omitempty"`
+	Env           map[string]string `yaml:"env,omitempty"`
+}
+
+// DiscoveryResult holds the configuration discovered from a target's current settings.
+type DiscoveryResult struct {
+	ID       string
+	Provider Provider
+	Env      map[string]string
 }
 
 // Provider holds abstract connection settings that each target translates
@@ -66,9 +79,9 @@ func (c *Context) TargetIDs() []string {
 
 // State tracks which context is active.
 type State struct {
-	Current         string              `yaml:"current"`
-	Previous        string              `yaml:"previous,omitempty"`
-	AppliedEnvKeys  map[string][]string `yaml:"appliedEnvKeys,omitempty"`
+	Current        string              `yaml:"current"`
+	Previous       string              `yaml:"previous,omitempty"`
+	AppliedEnvKeys map[string][]string `yaml:"appliedEnvKeys,omitempty"`
 }
 
 // Config is the top-level aictx configuration.

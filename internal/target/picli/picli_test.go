@@ -197,19 +197,19 @@ func TestApply_MergesExistingSettings(t *testing.T) {
 func TestDiscover_NoExtension(t *testing.T) {
 	tgt := setupPi(t)
 
-	te, err := tgt.Discover()
+	dr, err := tgt.Discover()
 	if err != nil {
 		t.Fatalf("Discover() error: %v", err)
 	}
-	if te.Provider.Endpoint != "" {
-		t.Errorf("Endpoint = %q, want empty", te.Provider.Endpoint)
+	if dr.Provider.Endpoint != "" {
+		t.Errorf("Endpoint = %q, want empty", dr.Provider.Endpoint)
 	}
 }
 
 func TestDiscover_WithExtensionAndSettings(t *testing.T) {
 	tgt := setupPi(t)
 
-	// Write settings
+	// Write settings (defaultThinkingLevel is Options-level; skipped in Discover)
 	settings := `{"defaultModel": "claude-sonnet-4-6", "defaultThinkingLevel": "medium"}`
 	if err := os.WriteFile(tgt.settingsPath(), []byte(settings), 0644); err != nil {
 		t.Fatal(err)
@@ -230,20 +230,22 @@ export default function (pi: ExtensionAPI) {
 		t.Fatal(err)
 	}
 
-	te, err := tgt.Discover()
+	dr, err := tgt.Discover()
 	if err != nil {
 		t.Fatalf("Discover() error: %v", err)
 	}
-	if te.Provider.Endpoint != "https://aikeys.maibornwolff.de/" {
-		t.Errorf("Endpoint = %q", te.Provider.Endpoint)
+	if dr.Provider.Endpoint != "https://aikeys.maibornwolff.de/" {
+		t.Errorf("Endpoint = %q", dr.Provider.Endpoint)
 	}
-	if te.Provider.APIKey != "sk-test-key" {
-		t.Errorf("APIKey = %q", te.Provider.APIKey)
+	if dr.Provider.APIKey != "sk-test-key" {
+		t.Errorf("APIKey = %q", dr.Provider.APIKey)
 	}
-	if te.Provider.Model != "claude-sonnet-4-6" {
-		t.Errorf("Model = %q", te.Provider.Model)
+	if dr.Provider.Model != "claude-sonnet-4-6" {
+		t.Errorf("Model = %q", dr.Provider.Model)
 	}
-	if te.Options.AlwaysThinking == nil || !*te.Options.AlwaysThinking {
-		t.Error("AlwaysThinking not set")
+	// AlwaysThinking is Options-level (context-level); DiscoveryResult has no Options field.
+	// Verify we get a valid result without panicking.
+	if dr.ID != ID {
+		t.Errorf("ID = %q, want %q", dr.ID, ID)
 	}
 }

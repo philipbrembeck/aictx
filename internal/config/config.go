@@ -23,10 +23,109 @@ func Path() string {
 	return filepath.Join(Dir(), "config.yaml")
 }
 
+// optionsHasFields returns true if any Options field is non-nil.
+func optionsHasFields(o Options) bool {
+	return o.AlwaysThinking != nil || o.DisableTelemetry != nil || o.DisableBetas != nil
+}
+
+// migrateV1 detects and lifts per-target Provider/Options/HasKeyringKey fields to the
+// context level (the new canonical location). It also migrates legacy per-target keyring
+// entries to the new context-level keyring account.
+//
+// Returns true if the config was modified and needs to be saved.
+func migrateV1(cfg *Config) bool {
+	needsSave := false
+
+	for ci := range cfg.Contexts {
+		ctx := &cfg.Contexts[ci]
+
+		// Check whether any target carries legacy per-target fields.
+		needsLift := false
+		for _, te := range ctx.Targets {
+			if !te.Provider.IsEmpty() || optionsHasFields(te.Options) || te.HasKeyringKey {
+				needsLift = true
+				break
+			}
+		}
+		if !needsLift {
+			continue
+		}
+
+		needsSave = true
+
+		// Lift first non-empty Provider to context level (if not already set).
+		if ctx.Provider.IsEmpty() {
+			for _, te := range ctx.Targets {
+				if !te.Provider.IsEmpty() {
+					ctx.Provider = te.Provider
+					break
+				}
+			}
+		}
+
+		// Lift first non-nil Options to context level (if not already set).
+		if !optionsHasFields(ctx.Options) {
+			for _, te := range ctx.Targets {
+				if optionsHasFields(te.Options) {
+					ctx.Options = te.Options
+					break
+				}
+			}
+		}
+
+		// Warn if multiple targets had differing non-empty API keys.
+		var nonEmptyKeys []string
+		for _, te := range ctx.Targets {
+			if te.Provider.APIKey != "" {
+				nonEmptyKeys = append(nonEmptyKeys, te.Provider.APIKey)
+			}
+		}
+		if len(nonEmptyKeys) > 1 {
+			first := nonEmptyKeys[0]
+			for _, k := range nonEmptyKeys[1:] {
+				if k != first {
+					fmt.Fprintf(os.Stderr, "aictx: warning: context %q had different API keys per target; using first non-empty key\n", ctx.Name)
+					break
+				}
+			}
+		}
+
+		// Migrate legacy per-target keyring entries to the new context-level account.
+		for _, te := range ctx.Targets {
+			if !te.HasKeyringKey {
+				continue
+			}
+			apiKey, kerr := keyring.GetLegacy(ctx.Name, te.ID)
+			if kerr != nil {
+				fmt.Fprintf(os.Stderr, "aictx: warning: could not read old keyring entry for %s/%s: %v\n", ctx.Name, te.ID, kerr)
+				continue
+			}
+			// Use the first non-empty key found from legacy keyring (prefer in-memory key).
+			if apiKey != "" && ctx.Provider.APIKey == "" {
+				ctx.Provider.APIKey = apiKey
+			}
+			// Remove the old keyring entry.
+			if derr := keyring.DeleteLegacy(ctx.Name, te.ID); derr != nil {
+				fmt.Fprintf(os.Stderr, "aictx: warning: could not delete old keyring entry for %s/%s: %v\n", ctx.Name, te.ID, derr)
+			}
+		}
+
+		// Slim down per-target entries: clear Provider/Options/HasKeyringKey.
+		for ti := range ctx.Targets {
+			ctx.Targets[ti].Provider = Provider{}
+			ctx.Targets[ti].Options = Options{}
+			ctx.Targets[ti].HasKeyringKey = false
+		}
+	}
+
+	return needsSave
+}
+
 // Load reads the config from disk. Returns an empty config if the file doesn't exist.
-// After loading, API keys stored as plain text are automatically migrated to the OS
-// keychain. API keys stored in the keychain are populated into memory (not persisted
-// to YAML).
+// On first load, old per-target provider/options fields are automatically lifted to the
+// context level (transparent migration). API keys stored as plain text are migrated to
+// the OS keychain. API keys stored in the keychain are populated into memory (not
+// persisted to YAML).
 func Load() (*Config, error) {
 	data, err := os.ReadFile(Path())
 	if err != nil {
@@ -41,32 +140,31 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("parsing config: %w", err)
 	}
 
-	// Migrate plain-text API keys to keyring, and populate in-memory keys from keyring.
-	needsSave := false
+	// Run legacy migration (per-target → context-level Provider/Options).
+	needsSave := migrateV1(&cfg)
+
+	// Handle context-level keyring.
 	for ci := range cfg.Contexts {
 		ctx := &cfg.Contexts[ci]
-		for ti := range ctx.Targets {
-			te := &ctx.Targets[ti]
 
-			if te.Provider.APIKey != "" {
-				// Old plain-text format: migrate to keyring.
-				if kerr := keyring.Set(ctx.Name, te.ID, te.Provider.APIKey); kerr != nil {
-					fmt.Fprintf(os.Stderr, "aictx: warning: could not migrate API key to keychain for %s/%s: %v\n", ctx.Name, te.ID, kerr)
-					// Leave the key in place so it still works.
-					continue
-				}
-				te.HasKeyringKey = true
-				te.Provider.APIKey = "" // will be cleared from YAML on save
-				needsSave = true
-			} else if te.HasKeyringKey {
-				// Load from keyring into memory only.
-				apiKey, kerr := keyring.Get(ctx.Name, te.ID)
-				if kerr != nil {
-					fmt.Fprintf(os.Stderr, "aictx: warning: could not read API key from keychain for %s/%s: %v\n", ctx.Name, te.ID, kerr)
-					continue
-				}
-				te.Provider.APIKey = apiKey
+		if ctx.Provider.APIKey != "" {
+			// Plain-text API key: migrate to keyring. Keep in memory for Apply().
+			if kerr := keyring.Set(ctx.Name, ctx.Provider.APIKey); kerr != nil {
+				fmt.Fprintf(os.Stderr, "aictx: warning: could not migrate API key to keychain for %s: %v\n", ctx.Name, kerr)
+				// Leave the key in place so it still works.
+				continue
 			}
+			ctx.HasKeyringKey = true
+			// Keep ctx.Provider.APIKey populated in memory; Save() will scrub it from disk.
+			needsSave = true
+		} else if ctx.HasKeyringKey {
+			// Load from keyring into memory only.
+			apiKey, kerr := keyring.Get(ctx.Name)
+			if kerr != nil {
+				fmt.Fprintf(os.Stderr, "aictx: warning: could not read API key from keychain for %s: %v\n", ctx.Name, kerr)
+				continue
+			}
+			ctx.Provider.APIKey = apiKey
 		}
 	}
 
@@ -94,17 +192,14 @@ func Save(cfg *Config) error {
 
 	for ci := range disk.Contexts {
 		ctx := &disk.Contexts[ci]
-		for ti := range ctx.Targets {
-			te := &ctx.Targets[ti]
-			if te.Provider.APIKey != "" {
-				if kerr := keyring.Set(ctx.Name, te.ID, te.Provider.APIKey); kerr != nil {
-					fmt.Fprintf(os.Stderr, "aictx: warning: could not store API key in keychain for %s/%s: %v\n", ctx.Name, te.ID, kerr)
-					// Fall through: key stays in YAML to avoid data loss.
-					continue
-				}
-				te.HasKeyringKey = true
-				te.Provider.APIKey = "" // scrub from disk representation
+		if ctx.Provider.APIKey != "" {
+			if kerr := keyring.Set(ctx.Name, ctx.Provider.APIKey); kerr != nil {
+				fmt.Fprintf(os.Stderr, "aictx: warning: could not store API key in keychain for %s: %v\n", ctx.Name, kerr)
+				// Fall through: key stays in YAML to avoid data loss.
+				continue
 			}
+			ctx.HasKeyringKey = true
+			ctx.Provider.APIKey = "" // scrub from disk representation
 		}
 	}
 
@@ -128,9 +223,24 @@ func deepCopy(cfg *Config) *Config {
 	cp.Contexts = make([]Context, len(cfg.Contexts))
 	for ci, ctx := range cfg.Contexts {
 		cCtx := Context{
-			Name:        ctx.Name,
-			Description: ctx.Description,
-			Command:     ctx.Command,
+			Name:          ctx.Name,
+			Description:   ctx.Description,
+			Command:       ctx.Command,
+			HasKeyringKey: ctx.HasKeyringKey,
+			Options:       ctx.Options,
+			Provider: Provider{
+				Endpoint:     ctx.Provider.Endpoint,
+				APIKey:       ctx.Provider.APIKey,
+				Model:        ctx.Provider.Model,
+				SmallModel:   ctx.Provider.SmallModel,
+				ProviderType: ctx.Provider.ProviderType,
+			},
+		}
+		if ctx.Provider.Headers != nil {
+			cCtx.Provider.Headers = make(map[string]string, len(ctx.Provider.Headers))
+			for k, v := range ctx.Provider.Headers {
+				cCtx.Provider.Headers[k] = v
+			}
 		}
 		cCtx.Targets = make([]TargetEntry, len(ctx.Targets))
 		for ti, te := range ctx.Targets {

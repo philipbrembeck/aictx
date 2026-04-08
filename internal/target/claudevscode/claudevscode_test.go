@@ -334,24 +334,25 @@ func TestDiscover_ReadsEnvVars(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	te, err := tgt.Discover()
+	dr, err := tgt.Discover()
 	if err != nil {
 		t.Fatalf("Discover() error: %v", err)
 	}
-	if te == nil {
+	if dr == nil {
 		t.Fatal("Discover() returned nil")
 	}
-	if te.Provider.Endpoint != "https://custom.api" {
-		t.Errorf("Endpoint = %q", te.Provider.Endpoint)
+	if dr.Provider.Endpoint != "https://custom.api" {
+		t.Errorf("Endpoint = %q", dr.Provider.Endpoint)
 	}
-	if te.Provider.APIKey != "sk-disc" {
-		t.Errorf("APIKey = %q", te.Provider.APIKey)
+	if dr.Provider.APIKey != "sk-disc" {
+		t.Errorf("APIKey = %q", dr.Provider.APIKey)
 	}
-	if te.Provider.Model != "claude-opus" {
-		t.Errorf("Model = %q", te.Provider.Model)
+	if dr.Provider.Model != "claude-opus" {
+		t.Errorf("Model = %q", dr.Provider.Model)
 	}
-	if te.Options.DisableTelemetry == nil || !*te.Options.DisableTelemetry {
-		t.Error("DisableTelemetry not set")
+	// DISABLE_TELEMETRY is Options-level; it must not appear in dr.Env.
+	if _, ok := dr.Env["DISABLE_TELEMETRY"]; ok {
+		t.Error("DISABLE_TELEMETRY should not appear in DiscoveryResult.Env")
 	}
 }
 
@@ -366,12 +367,12 @@ func TestDiscover_CustomEnv(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	te, err := tgt.Discover()
+	dr, err := tgt.Discover()
 	if err != nil {
 		t.Fatalf("Discover() error: %v", err)
 	}
-	if te.Env["MY_CUSTOM"] != "val" {
-		t.Errorf("Env[MY_CUSTOM] = %q, want val", te.Env["MY_CUSTOM"])
+	if dr.Env["MY_CUSTOM"] != "val" {
+		t.Errorf("Env[MY_CUSTOM] = %q, want val", dr.Env["MY_CUSTOM"])
 	}
 }
 
@@ -380,11 +381,11 @@ func TestDiscover_NotInstalled(t *testing.T) {
 	t.Setenv("HOME", home)
 	tgt := New()
 
-	te, err := tgt.Discover()
+	dr, err := tgt.Discover()
 	if err != nil {
 		t.Fatalf("Discover() error: %v", err)
 	}
-	if te != nil {
-		t.Errorf("Discover() = %v, want nil when not installed", te)
+	if dr != nil {
+		t.Errorf("Discover() = %v, want nil when not installed", dr)
 	}
 }

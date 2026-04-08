@@ -44,19 +44,21 @@ func showRun(cmd *cobra.Command, args []string) error {
 	// Print as YAML, masking secrets unless --reveal
 	display := *ctx
 	if !showReveal {
+		// Mask context-level API key and headers.
+		if display.Provider.APIKey != "" {
+			display.Provider.APIKey = maskValue(display.Provider.APIKey)
+		}
+		if len(display.Provider.Headers) > 0 {
+			masked := make(map[string]string, len(display.Provider.Headers))
+			for k := range display.Provider.Headers {
+				masked[k] = "********"
+			}
+			display.Provider.Headers = masked
+		}
+		// Mask per-target custom env var values.
 		display.Targets = make([]config.TargetEntry, len(ctx.Targets))
 		copy(display.Targets, ctx.Targets)
 		for i := range display.Targets {
-			if display.Targets[i].Provider.APIKey != "" {
-				display.Targets[i].Provider.APIKey = maskValue(display.Targets[i].Provider.APIKey)
-			}
-			if len(display.Targets[i].Provider.Headers) > 0 {
-				masked := make(map[string]string, len(display.Targets[i].Provider.Headers))
-				for k := range display.Targets[i].Provider.Headers {
-					masked[k] = "********"
-				}
-				display.Targets[i].Provider.Headers = masked
-			}
 			if len(display.Targets[i].Env) > 0 {
 				masked := make(map[string]string, len(display.Targets[i].Env))
 				for k, v := range display.Targets[i].Env {
