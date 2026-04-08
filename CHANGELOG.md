@@ -55,26 +55,66 @@ If targets had different API keys, a warning is printed to stderr and the first 
 
 #### Back up your API keys before upgrading
 
-The migration moves keyring entries automatically, but if something goes wrong you want your keys handy. Run this before upgrading:
+The migration moves keyring entries automatically, but if something goes wrong you want your keys handy. Run the script for your platform before upgrading and save the output somewhere safe (local file, password manager note, etc.).
+
+**macOS** — uses the `security` CLI (built-in):
 
 ```sh
 #!/usr/bin/env sh
-# Dumps all aictx keyring entries to stdout so you can save them somewhere safe.
-# Requires the `security` CLI (macOS) or equivalent for your platform.
-
-echo "=== aictx keyring backup ==="
-# List all entries for the aictx service and print account + password
-security find-generic-password -s aictx 2>/dev/null | grep "acct" | while read -r line; do
-  account=$(echo "$line" | sed 's/.*"acct"<blob>="\(.*\)"/\1/')
-  password=$(security find-generic-password -s aictx -a "$account" -w 2>/dev/null)
-  echo "account=$account  key=$password"
+# Reads context names from config.yaml and dumps each keyring entry.
+CONFIG="$HOME/.config/aictx/config.yaml"
+echo "=== aictx keyring backup (macOS) ==="
+grep "^  - name:" "$CONFIG" | sed 's/.*name: //' | while read -r ctx; do
+  # Old format: contextName/targetID
+  for tid in claude-code-cli claude-code-vscode pi-cli; do
+    key=$(security find-generic-password -s aictx -a "$ctx/$tid" -w 2>/dev/null)
+    [ -n "$key" ] && echo "account=$ctx/$tid  key=$key"
+  done
+  # New format: contextName (already migrated)
+  key=$(security find-generic-password -s aictx -a "$ctx" -w 2>/dev/null)
+  [ -n "$key" ] && echo "account=$ctx  key=$key"
 done
 ```
 
-Save the output somewhere safe (e.g. a local file or password manager note). After migration you can verify the new entries with:
+**Linux** — uses `secret-tool` (install via `apt install libsecret-tools` / `dnf install libsecret`):
 
 ```sh
-security find-generic-password -s aictx -w  # single context-level entry
+#!/usr/bin/env sh
+CONFIG="$HOME/.config/aictx/config.yaml"
+echo "=== aictx keyring backup (Linux) ==="
+grep "^  - name:" "$CONFIG" | sed 's/.*name: //' | while read -r ctx; do
+  for tid in claude-code-cli claude-code-vscode pi-cli; do
+    key=$(secret-tool lookup service aictx account "$ctx/$tid" 2>/dev/null)
+    [ -n "$key" ] && echo "account=$ctx/$tid  key=$key"
+  done
+  key=$(secret-tool lookup service aictx account "$ctx" 2>/dev/null)
+  [ -n "$key" ] && echo "account=$ctx  key=$key"
+done
+```
+
+**Windows** — uses PowerShell and Windows Credential Manager:
+
+```powershell
+# Run in PowerShell. Reads config.yaml and dumps each Credential Manager entry.
+$config = "$env:APPDATA\..\Local\aictx\config.yaml"
+if (-not (Test-Path $config)) { $config = "$env:HOME\.config\aictx\config.yaml" }
+
+Write-Host "=== aictx keyring backup (Windows) ==="
+$contexts = (Get-Content $config | Select-String "^  - name:").Matches.Value -replace ".*name: "
+
+Add-Type -AssemblyName System.Runtime.WindowsRuntime
+[Windows.Security.Credentials.PasswordVault,Windows.Security.Credentials,ContentType=WindowsRuntime] | Out-Null
+$vault = New-Object Windows.Security.Credentials.PasswordVault
+
+foreach ($ctx in $contexts) {
+    foreach ($account in @("$ctx/claude-code-cli", "$ctx/claude-code-vscode", "$ctx/pi-cli", $ctx)) {
+        try {
+            $cred = $vault.Retrieve("aictx", $account)
+            $cred.RetrievePassword()
+            Write-Host "account=$account  key=$($cred.Password)"
+        } catch {}
+    }
+}
 ```
 
 ### New features
