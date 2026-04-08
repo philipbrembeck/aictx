@@ -52,6 +52,8 @@ func init() {
 	rootCmd.AddCommand(discoverCmd)
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(completionCmd)
+	rootCmd.AddCommand(targetsCmd)
+	rootCmd.AddCommand(versionCmd)
 }
 
 func rootRun(cmd *cobra.Command, args []string) error {
@@ -120,6 +122,16 @@ func switchContext(cfg *config.Config, name string) error {
 			continue
 		}
 
+		// Construct an effective TargetEntry by merging context-level Provider/Options
+		// with per-target Env.
+		effective := config.TargetEntry{
+			ID:            te.ID,
+			Provider:      ctx.Provider,
+			Options:       ctx.Options,
+			HasKeyringKey: ctx.HasKeyringKey,
+			Env:           te.Env,
+		}
+
 		// Inject previously-applied env keys so Apply() can remove stale
 		// entries before writing new ones.
 		if cfg.State.AppliedEnvKeys != nil {
@@ -131,7 +143,7 @@ func switchContext(cfg *config.Config, name string) error {
 			}
 		}
 
-		if err := t.Apply(te); err != nil {
+		if err := t.Apply(effective); err != nil {
 			fmt.Fprintf(os.Stderr, "  ! %s: %v\n", t.Name(), err)
 			continue
 		}
@@ -141,7 +153,7 @@ func switchContext(cfg *config.Config, name string) error {
 		// Track which env keys were applied for this target so the next
 		// switch can clean them up.
 		if te.ID == claudecli.ID || te.ID == claudevscode.ID {
-			keys := targetAppliedEnvKeys(te)
+			keys := targetAppliedEnvKeys(effective)
 			if len(keys) > 0 {
 				newAppliedEnvKeys[te.ID] = keys
 			}
@@ -183,8 +195,8 @@ func switchContext(cfg *config.Config, name string) error {
 	return nil
 }
 
-// targetAppliedEnvKeys returns the set of env keys that Apply() will write
-// for a TargetEntry. Used by both claudecli and claudevscode to track stale keys.
+// targetAppliedEnvKeys returns the set of env keys that Apply() will write for a
+// TargetEntry. Used by claudecli and claudevscode to track stale keys for the next switch.
 func targetAppliedEnvKeys(te config.TargetEntry) []string {
 	var keys []string
 	if te.Provider.Endpoint != "" {

@@ -11,19 +11,22 @@ go run .
 
 ## Project Structure
 
-- `cmd/` — Cobra CLI commands (root, add, rm, show, current, discover)
+- `cmd/` — Cobra CLI commands (root, add, rm, show, current, discover, targets, version)
 - `internal/config/` — Config types and load/save (`~/.config/aictx/config.yaml`)
 - `internal/target/` — Target interface, registry, and implementations
   - `claudecli/` — Claude Code CLI target (`~/.claude/settings.json`)
   - `claudevscode/` — Claude Code for VSCode target (surgical edits to VSCode `settings.json`)
-- `internal/fzf/` — Optional fzf fuzzy picker integration
+  - `picli/` — pi Coding Agent CLI target
+- `internal/picker/` — Interactive single-select and multi-select (checkbox) pickers
 
 ## Architecture
 
-- **Context**: Named configuration with a list of target entries
-- **TargetEntry**: Per-target provider settings (endpoint, apiKey, model) and options (thinking, telemetry)
+- **Context**: Named configuration with a shared Provider, Options, and a list of target entries
+- **TargetEntry**: `{ID, Env}` only — per-target custom env vars; provider/options live at context level
 - **Target interface**: `ID()`, `Name()`, `Detect()`, `Apply(TargetEntry)`, `Discover()`
-- Provider and Options live inside TargetEntry, not at Context level — different targets can have different settings
+- Provider and Options live at Context level — one API key and model shared across all targets in a context
+- `switchContext` constructs an effective TargetEntry (merges `ctx.Provider` + `ctx.Options` + `te.Env`) before calling `t.Apply()`
+- `DiscoveryResult` is returned by `Discover()` and carries the discovered Provider alongside ID and Env
 
 ## Conventions
 

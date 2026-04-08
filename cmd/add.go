@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/IQNeoXen/aictx/internal/config"
+	"github.com/IQNeoXen/aictx/internal/picker"
 	"github.com/IQNeoXen/aictx/internal/target"
 	"github.com/spf13/cobra"
 )
@@ -39,8 +40,8 @@ func init() {
 	addCmd.Flags().StringVar(&addCommand, "command", "", "Shell command to run after switching to this context")
 	addCmd.Flags().StringVar(&addEndpoint, "endpoint", "", "Provider endpoint URL")
 	addCmd.Flags().StringVar(&addAPIKey, "api-key", "", "Provider API key")
-	addCmd.Flags().StringVar(&addModel, "model", "", "Model (e.g. claude-opus-4.6)")
-	addCmd.Flags().StringVar(&addSmallModel, "small-model", "", "Small/cheap model (e.g. claude-haiku-4.5)")
+	addCmd.Flags().StringVar(&addModel, "model", "", "Model (e.g. claude-opus-4-6)")
+	addCmd.Flags().StringVar(&addSmallModel, "small-model", "", "Small/cheap model (e.g. claude-haiku-4-5)")
 	addCmd.Flags().BoolVar(&addThinking, "thinking", false, "Enable always thinking")
 	addCmd.Flags().BoolVar(&addNoTelemetry, "no-telemetry", false, "Disable telemetry")
 	addCmd.Flags().BoolVar(&addNoBetas, "no-betas", false, "Disable experimental betas")
@@ -70,28 +71,39 @@ func addRun(cmd *cobra.Command, args []string) error {
 		ctx.Description = addDesc
 		ctx.Command = addCommand
 
-		// Build provider and options from flags (same for all targets in flag mode)
-		prov := config.Provider{
+		// Build context-level provider and options from flags.
+		ctx.Provider = config.Provider{
 			Endpoint:   addEndpoint,
 			APIKey:     addAPIKey,
 			Model:      addModel,
 			SmallModel: addSmallModel,
 		}
-		var opts config.Options
 		if addThinking {
 			b := true
-			opts.AlwaysThinking = &b
+			ctx.Options.AlwaysThinking = &b
 		}
 		if addNoTelemetry {
 			b := true
-			opts.DisableTelemetry = &b
+			ctx.Options.DisableTelemetry = &b
 		}
 		if addNoBetas {
 			b := true
-			opts.DisableBetas = &b
+			ctx.Options.DisableBetas = &b
 		}
 
-		// Parse --env KEY=VALUE flags
+		// Parse --header Key:Value flags
+		for _, h := range addHeaders {
+			idx := strings.Index(h, ":")
+			if idx <= 0 {
+				return fmt.Errorf("invalid --header value %q: expected Key:Value", h)
+			}
+			if ctx.Provider.Headers == nil {
+				ctx.Provider.Headers = map[string]string{}
+			}
+			ctx.Provider.Headers[h[:idx]] = h[idx+1:]
+		}
+
+		// Parse --env KEY=VALUE flags (shared across all targets in flag mode)
 		var envMap map[string]string
 		for _, e := range addEnv {
 			idx := strings.Index(e, "=")
@@ -104,27 +116,13 @@ func addRun(cmd *cobra.Command, args []string) error {
 			envMap[e[:idx]] = e[idx+1:]
 		}
 
-		// Parse --header Key:Value flags
-		for _, h := range addHeaders {
-			idx := strings.Index(h, ":")
-			if idx <= 0 {
-				return fmt.Errorf("invalid --header value %q: expected Key:Value", h)
-			}
-			if prov.Headers == nil {
-				prov.Headers = map[string]string{}
-			}
-			prov.Headers[h[:idx]] = h[idx+1:]
-		}
-
 		for _, tid := range addTargets {
 			if target.ByID(tid) == nil {
 				return fmt.Errorf("unknown target %q. Available: %v", tid, target.IDs())
 			}
 			ctx.Targets = append(ctx.Targets, config.TargetEntry{
-				ID:       tid,
-				Provider: prov,
-				Options:  opts,
-				Env:      envMap,
+				ID:  tid,
+				Env: envMap,
 			})
 		}
 	} else {
@@ -134,29 +132,88 @@ func addRun(cmd *cobra.Command, args []string) error {
 		ctx.Description = prompt(scanner, "Description")
 		ctx.Command = prompt(scanner, "Command to run on switch (leave empty to skip)")
 
-		// Target selection
-		fmt.Println("\nAvailable targets:")
-		allTargets := target.All()
-		for i, t := range allTargets {
-			detected := ""
-			if t.Detect() {
-				detected = " (detected)"
-			}
-			fmt.Printf("  [%d] %s (%s)%s\n", i+1, t.Name(), t.ID(), detected)
+		// Context-level provider prompt
+		fmt.Println("\nProvider (leave empty for native auth / OAuth):")
+		ctx.Provider.Endpoint = prompt(scanner, "  Endpoint URL")
+		ctx.Provider.APIKey = prompt(scanner, "  API Key")
+		ctx.Provider.Model = prompt(scanner, "  Model (e.g. claude-opus-4-6)")
+		ctx.Provider.SmallModel = prompt(scanner, "  Small model (e.g. claude-haiku-4-5)")
+
+		fmt.Println("Options:")
+		if yesNo(scanner, "  Always thinking?", true) {
+			b := true
+			ctx.Options.AlwaysThinking = &b
 		}
-		fmt.Print("Select targets (comma-separated numbers, e.g. 1,2): ")
+		if yesNo(scanner, "  Disable telemetry?", true) {
+			b := true
+			ctx.Options.DisableTelemetry = &b
+		}
+		if yesNo(scanner, "  Disable experimental betas?", false) {
+			b := true
+			ctx.Options.DisableBetas = &b
+		}
+
+		fmt.Println("Custom headers (leave name empty to finish):")
+		for {
+			key := prompt(scanner, "  Header name")
+			if key == "" {
+				break
+			}
+			value := prompt(scanner, "  Value")
+			if ctx.Provider.Headers == nil {
+				ctx.Provider.Headers = map[string]string{}
+			}
+			ctx.Provider.Headers[key] = value
+		}
+
+		// Target selection
+		fmt.Println("\nSelect targets:")
+		allTargets := target.All()
+		labels := make([]string, len(allTargets))
+		initialSelected := make([]bool, len(allTargets))
+		for i, t := range allTargets {
+			lbl := fmt.Sprintf("%s (%s)", t.Name(), t.ID())
+			if t.Detect() {
+				lbl += " [detected]"
+				initialSelected[i] = true
+			}
+			labels[i] = lbl
+		}
 
 		var selectedTargets []target.Target
-		if scanner.Scan() {
-			for _, p := range strings.Split(scanner.Text(), ",") {
-				p = strings.TrimSpace(p)
-				if p == "" {
-					continue
+		if picker.IsTerminal() {
+			result, err := picker.PickMulti(labels, initialSelected)
+			if err != nil {
+				return err
+			}
+			if result != nil {
+				for i, sel := range result {
+					if sel {
+						selectedTargets = append(selectedTargets, allTargets[i])
+					}
 				}
-				idx := 0
-				fmt.Sscanf(p, "%d", &idx)
-				if idx >= 1 && idx <= len(allTargets) {
-					selectedTargets = append(selectedTargets, allTargets[idx-1])
+			}
+		} else {
+			// Non-terminal fallback: plain numbered list
+			for i, lbl := range labels {
+				checked := " "
+				if initialSelected[i] {
+					checked = "x"
+				}
+				fmt.Printf("  [%s] %d. %s\n", checked, i+1, lbl)
+			}
+			fmt.Print("Select targets (comma-separated numbers, e.g. 1,2): ")
+			if scanner.Scan() {
+				for _, p := range strings.Split(scanner.Text(), ",") {
+					p = strings.TrimSpace(p)
+					if p == "" {
+						continue
+					}
+					idx := 0
+					fmt.Sscanf(p, "%d", &idx)
+					if idx >= 1 && idx <= len(allTargets) {
+						selectedTargets = append(selectedTargets, allTargets[idx-1])
+					}
 				}
 			}
 		}
@@ -164,44 +221,10 @@ func addRun(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("no targets selected")
 		}
 
-		// Configure each target
+		// Configure per-target env vars only
 		for _, t := range selectedTargets {
 			fmt.Printf("\n--- %s (%s) ---\n", t.Name(), t.ID())
-
 			te := config.TargetEntry{ID: t.ID()}
-
-			fmt.Println("Provider (leave empty for native auth / OAuth):")
-			te.Provider.Endpoint = prompt(scanner, "  Endpoint URL")
-			te.Provider.APIKey = prompt(scanner, "  API Key")
-			te.Provider.Model = prompt(scanner, "  Model (e.g. claude-opus-4.6)")
-			te.Provider.SmallModel = prompt(scanner, "  Small model (e.g. claude-haiku-4.5)")
-
-			fmt.Println("Options:")
-			if yesNo(scanner, "  Always thinking?", true) {
-				b := true
-				te.Options.AlwaysThinking = &b
-			}
-			if yesNo(scanner, "  Disable telemetry?", true) {
-				b := true
-				te.Options.DisableTelemetry = &b
-			}
-			if yesNo(scanner, "  Disable experimental betas?", false) {
-				b := true
-				te.Options.DisableBetas = &b
-			}
-
-			fmt.Println("Custom headers (leave name empty to finish):")
-			for {
-				key := prompt(scanner, "  Header name")
-				if key == "" {
-					break
-				}
-				value := prompt(scanner, "  Value")
-				if te.Provider.Headers == nil {
-					te.Provider.Headers = map[string]string{}
-				}
-				te.Provider.Headers[key] = value
-			}
 
 			fmt.Println("Custom env vars (leave name empty to finish):")
 			for {
