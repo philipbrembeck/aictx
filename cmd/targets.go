@@ -73,6 +73,8 @@ func targetsRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Rebuild target list preserving existing TargetEntry data (env vars, etc.)
+	// Track whether any targets were added (not just removed).
+	anyAdded := false
 	var newTargets []config.TargetEntry
 	for i, t := range allTargets {
 		if !result[i] {
@@ -82,6 +84,7 @@ func targetsRun(cmd *cobra.Command, args []string) error {
 			newTargets = append(newTargets, *existing)
 		} else {
 			newTargets = append(newTargets, config.TargetEntry{ID: t.ID()})
+			anyAdded = true
 		}
 	}
 	ctx.Targets = newTargets
@@ -91,5 +94,15 @@ func targetsRun(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("Saved targets for context %q.\n", name)
+
+	// Re-apply the context if it is the active one and targets were added,
+	// so newly-added tools pick up the current provider settings immediately.
+	if anyAdded && name == cfg.State.Current {
+		fmt.Println("Applying context to new targets...")
+		if err := switchContext(cfg, name); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
