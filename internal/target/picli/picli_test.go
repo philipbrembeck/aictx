@@ -192,6 +192,114 @@ func TestApply_MergesExistingSettings(t *testing.T) {
 	}
 }
 
+// ---------- Copilot provider ----------
+
+func TestPiProviderName_CopilotEndpoint(t *testing.T) {
+	tgt := New()
+	te := config.TargetEntry{
+		Provider: config.Provider{
+			Endpoint:     "https://api.githubcopilot.com",
+			APIKey:       "tid=testtoken",
+			ProviderType: "openai", // resolved from "copilot" by switchContext
+		},
+	}
+	name := tgt.piProviderName(te)
+	if name != "copilot" {
+		t.Errorf("piProviderName() = %q, want \"copilot\"", name)
+	}
+}
+
+func TestPiApply_CopilotProvider(t *testing.T) {
+	tgt := setupPi(t)
+
+	// No APIKey — Copilot extension uses oauth refresh callbacks, not a static token.
+	te := config.TargetEntry{
+		Provider: config.Provider{
+			Endpoint:     "https://api.githubcopilot.com",
+			Model:        "gpt-4o",
+			SmallModel:   "gpt-4o-mini",
+			ProviderType: "openai",
+			Headers: map[string]string{
+				"Editor-Version":         "vscode/1.85.0",
+				"Editor-Plugin-Version":  "copilot-chat/0.12.0",
+				"Copilot-Integration-Id": "vscode-chat",
+				"OpenAI-Intent":          "conversation-panel",
+			},
+		},
+	}
+	if err := tgt.Apply(te); err != nil {
+		t.Fatalf("Apply() error: %v", err)
+	}
+
+	ext := readExtension(t, tgt)
+
+	// Provider name must be "copilot".
+	if !strings.Contains(ext, `"copilot"`) {
+		t.Errorf("extension missing \"copilot\" provider name; got:\n%s", ext)
+	}
+	// Must use oauth callbacks, not a static apiKey.
+	if !strings.Contains(ext, "oauth:") {
+		t.Errorf("extension missing oauth block; got:\n%s", ext)
+	}
+	if !strings.Contains(ext, "refreshToken") {
+		t.Errorf("extension missing refreshToken callback; got:\n%s", ext)
+	}
+	if !strings.Contains(ext, "aictx copilot refresh") {
+		t.Errorf("extension should call 'aictx copilot refresh'; got:\n%s", ext)
+	}
+	// Must NOT contain a hardcoded api token.
+	if strings.Contains(ext, "tid=") {
+		t.Errorf("extension must not contain a hardcoded Copilot token; got:\n%s", ext)
+	}
+	// authHeader must be present.
+	if !strings.Contains(ext, "authHeader: true") {
+		t.Errorf("extension missing authHeader; got:\n%s", ext)
+	}
+	// API format must be openai-completions (inside the models array).
+	if !strings.Contains(ext, `"openai-completions"`) {
+		t.Errorf("extension missing openai-completions api; got:\n%s", ext)
+	}
+	// All 4 required Copilot headers must appear.
+	for _, header := range []string{
+		"Editor-Version",
+		"Editor-Plugin-Version",
+		"Copilot-Integration-Id",
+		"OpenAI-Intent",
+	} {
+		if !strings.Contains(ext, header) {
+			t.Errorf("extension missing header %q; got:\n%s", header, ext)
+		}
+	}
+	// Models must be present with reasoning: false.
+	if !strings.Contains(ext, `"gpt-4o"`) {
+		t.Error("extension missing gpt-4o model")
+	}
+	if !strings.Contains(ext, "reasoning: false") {
+		t.Errorf("extension should have reasoning: false for gpt-4o; got:\n%s", ext)
+	}
+
+	// settings.json should use "copilot" as defaultProvider.
+	m := readSettingsMap(t, tgt)
+	if m["defaultProvider"] != "copilot" {
+		t.Errorf("defaultProvider = %v, want \"copilot\"", m["defaultProvider"])
+	}
+	if m["defaultModel"] != "gpt-4o" {
+		t.Errorf("defaultModel = %v, want \"gpt-4o\"", m["defaultModel"])
+	}
+}
+
+func TestModelEntry_NonClaudeReasoning(t *testing.T) {
+	tgt := New()
+	entry := tgt.modelEntry("gpt-4o", "openai-completions")
+	if !strings.Contains(entry, "reasoning: false") {
+		t.Errorf("gpt-4o modelEntry should have reasoning: false; got:\n%s", entry)
+	}
+	claudeEntry := tgt.modelEntry("claude-3.7-sonnet", "anthropic-messages")
+	if !strings.Contains(claudeEntry, "reasoning: true") {
+		t.Errorf("claude-3.7-sonnet modelEntry should have reasoning: true; got:\n%s", claudeEntry)
+	}
+}
+
 // ---------- Discover ----------
 
 func TestDiscover_NoExtension(t *testing.T) {

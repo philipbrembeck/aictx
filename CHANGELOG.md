@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.1.1 (2026-04-11)
+
+### Added
+
+- **GitHub Copilot provider** for the pi Coding Agent CLI
+  - `aictx copilot login` — OAuth 2.0 Device Flow authentication; stores the permanent OAuth token in the OS keychain
+  - `aictx copilot status` — shows login state, username, and Copilot contexts
+  - `aictx copilot logout` — removes the stored OAuth token and clears login metadata
+  - On every `aictx <context>` switch, the stored OAuth token is automatically exchanged for a fresh 30-minute Copilot API token and applied to the pi extension file
+  - The generated pi extension registers a `"copilot"` provider with `api: "openai-completions"` and the four required Copilot API headers
+  - Non-pi-cli targets in a Copilot context are skipped with a warning (Copilot API is OpenAI-compatible only; Claude Code requires Anthropic format)
+- `CopilotLogin` field added to `Config` struct (stored in `config.yaml`) to persist username and login timestamp
+- Keyring helpers `SetCopilotOAuth`, `GetCopilotOAuth`, `DeleteCopilotOAuth`, `IsCopilotLoggedIn` in `internal/keyring`
+
 ## v0.1.0 (2026-04-08)
 
 ### Breaking changes

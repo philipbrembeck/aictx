@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-
 	"github.com/IQNeoXen/aictx/internal/config"
+	"github.com/IQNeoXen/aictx/internal/copilot"
+	"github.com/IQNeoXen/aictx/internal/keyring"
 	"github.com/IQNeoXen/aictx/internal/picker"
 	"github.com/IQNeoXen/aictx/internal/target"
 	"github.com/IQNeoXen/aictx/internal/target/claudecli"
 	"github.com/IQNeoXen/aictx/internal/target/claudevscode"
+	"github.com/IQNeoXen/aictx/internal/target/picli"
 	"github.com/spf13/cobra"
 )
 
@@ -54,6 +56,7 @@ func init() {
 	rootCmd.AddCommand(completionCmd)
 	rootCmd.AddCommand(targetsCmd)
 	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(copilotCmd)
 }
 
 func rootRun(cmd *cobra.Command, args []string) error {
@@ -108,6 +111,24 @@ func switchContext(cfg *config.Config, name string) error {
 		return fmt.Errorf("context %q not found. Available: %v", name, cfg.ContextNames())
 	}
 
+	// Resolve Copilot provider before applying to targets.
+	// No token exchange here — the pi extension handles auto-renewal via its
+	// oauth refreshToken callback (calls 'aictx copilot refresh' internally).
+	resolvedProvider := ctx.Provider
+	if ctx.Provider.ProviderType == "copilot" {
+		if !keyring.IsCopilotLoggedIn() {
+			return fmt.Errorf("Copilot: not logged in. Run 'aictx copilot login' first")
+		}
+		resolvedProvider = config.Provider{
+			Endpoint:     copilot.CopilotAPIEndpoint,
+			Model:        ctx.Provider.Model,
+			SmallModel:   ctx.Provider.SmallModel,
+			ProviderType: "openai", // tells picli to generate openai-completions models
+			Headers:      copilot.RequiredHeaders(),
+			// No APIKey — the generated extension uses oauth refresh callbacks instead.
+		}
+	}
+
 	// Only apply to targets listed in this context
 	applied := 0
 	newAppliedEnvKeys := map[string][]string{}
@@ -117,16 +138,26 @@ func switchContext(cfg *config.Config, name string) error {
 			fmt.Fprintf(os.Stderr, "  ? %s: unknown target\n", te.ID)
 			continue
 		}
+
+		// Copilot provider only supports pi-cli (OpenAI-compatible API format).
+		// Claude Code targets use the Anthropic protocol and are not compatible.
+		if ctx.Provider.ProviderType == "copilot" && te.ID != picli.ID {
+			fmt.Fprintf(os.Stderr, "  ⚠ %s: Copilot provider is not yet supported for this target (skipped)\n",
+				t.Name())
+			continue
+		}
+
 		if !t.Detect() {
 			fmt.Fprintf(os.Stderr, "  - %s: not installed\n", t.Name())
 			continue
 		}
 
 		// Construct an effective TargetEntry by merging context-level Provider/Options
-		// with per-target Env.
+		// with per-target Env. For Copilot contexts, resolvedProvider contains the
+		// freshly-exchanged short-lived API token (ProviderType resolved to "openai").
 		effective := config.TargetEntry{
 			ID:            te.ID,
-			Provider:      ctx.Provider,
+			Provider:      resolvedProvider,
 			Options:       ctx.Options,
 			HasKeyringKey: ctx.HasKeyringKey,
 			Env:           te.Env,

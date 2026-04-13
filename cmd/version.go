@@ -7,7 +7,7 @@ import (
 )
 
 // Version is the current aictx version.
-const Version = "0.1.0"
+const Version = "0.1.1"
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
