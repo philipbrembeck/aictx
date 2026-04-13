@@ -18,9 +18,24 @@ import (
 
 var copilotCmd = &cobra.Command{
 	Use:           "copilot",
-	Short:         "Manage GitHub Copilot authentication",
+	Short:         "Switch to the 'copilot' context, or manage GitHub Copilot authentication",
+	RunE:          copilotRun,
 	SilenceErrors: true,
 	SilenceUsage:  true,
+}
+
+func copilotRun(cmd *cobra.Command, args []string) error {
+	// When called with no subcommand, behave like `aictx copilot` —
+	// i.e. switch to a context named "copilot", just like any other context name.
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	if cfg.FindContext("copilot") == nil {
+		// No context named "copilot" — show the subcommand help instead.
+		return cmd.Help()
+	}
+	return switchContext(cfg, "copilot")
 }
 
 var copilotLoginCmd = &cobra.Command{
