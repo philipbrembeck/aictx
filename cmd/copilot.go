@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -66,6 +67,37 @@ func init() {
 	copilotCmd.AddCommand(copilotLoginCmd)
 	copilotCmd.AddCommand(copilotStatusCmd)
 	copilotCmd.AddCommand(copilotLogoutCmd)
+	copilotCmd.AddCommand(copilotRefreshCmd)
+}
+
+// copilotRefreshCmd is a hidden subcommand used internally by the pi extension.
+// It exchanges the stored OAuth token for a fresh Copilot API token and prints
+// JSON to stdout: {"token": "...", "expiresAt": <unix_ms>}
+var copilotRefreshCmd = &cobra.Command{
+	Use:           "refresh",
+	Short:         "Print a fresh Copilot API token as JSON (used by the pi extension)",
+	Hidden:        true,
+	RunE:          copilotRefreshRun,
+	SilenceErrors: true,
+	SilenceUsage:  true,
+}
+
+func copilotRefreshRun(cmd *cobra.Command, args []string) error {
+	oauthToken, err := keyring.GetCopilotOAuth()
+	if err != nil {
+		return fmt.Errorf("not logged in — run 'aictx copilot login' first")
+	}
+	ct, err := copilot.ExchangeToken(oauthToken)
+	if err != nil {
+		return fmt.Errorf("token refresh failed: %w", err)
+	}
+	return json.NewEncoder(os.Stdout).Encode(struct {
+		Token     string `json:"token"`
+		ExpiresAt int64  `json:"expiresAt"` // Unix milliseconds (compatible with JS Date.now())
+	}{
+		Token:     ct.Token,
+		ExpiresAt: ct.ExpiresAt.UnixMilli(),
+	})
 }
 
 func copilotLoginRun(cmd *cobra.Command, args []string) error {

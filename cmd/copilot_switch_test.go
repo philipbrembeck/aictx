@@ -15,6 +15,12 @@ import (
 	zalkeyring "github.com/zalando/go-keyring"
 )
 
+// Ensure json, http, httptest, time are used (by the SkipsClaudeTargets and NotLoggedIn tests).
+var _ = json.Marshal
+var _ = http.MethodGet
+var _ = httptest.NewServer
+var _ = time.Now
+
 // setupCopilotEnv sets up a temporary HOME/.pi/agent dir and mocks the keyring.
 // Returns the config loaded from a temporary XDG config dir.
 func setupCopilotEnv(t *testing.T) {
@@ -31,29 +37,14 @@ func setupCopilotEnv(t *testing.T) {
 	}
 }
 
-func TestSwitchContext_CopilotProvider_FetchesToken(t *testing.T) {
+func TestSwitchContext_CopilotProvider_WritesOAuthExtension(t *testing.T) {
 	setupCopilotEnv(t)
 
-	// Mock Copilot token exchange endpoint.
-	expiresAt := time.Now().Add(30 * time.Minute).Unix()
-	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"token":      "tid=freshcopilottoken",
-			"expires_at": expiresAt,
-		})
-	}))
-	defer tokenSrv.Close()
-
-	origURL := copilot.CopilotTokenURL
-	copilot.CopilotTokenURL = tokenSrv.URL
-	t.Cleanup(func() { copilot.CopilotTokenURL = origURL })
-
-	// Store an OAuth token in the mock keyring.
+	// Store an OAuth token in the mock keyring (no token exchange needed at switch time).
 	if err := zalkeyring.Set("aictx", "copilot-oauth", "gho_oauthtoken"); err != nil {
 		t.Fatalf("keyring.Set: %v", err)
 	}
 
-	// Build a config with a Copilot context.
 	cfg := &config.Config{
 		Contexts: []config.Context{
 			{
@@ -70,17 +61,13 @@ func TestSwitchContext_CopilotProvider_FetchesToken(t *testing.T) {
 	if err := config.Save(cfg); err != nil {
 		t.Fatalf("config.Save: %v", err)
 	}
-
-	reloaded, err := config.Load()
-	if err != nil {
-		t.Fatalf("config.Load: %v", err)
-	}
+	reloaded, _ := config.Load()
 
 	if err := switchContext(reloaded, "github-copilot"); err != nil {
 		t.Fatalf("switchContext() error: %v", err)
 	}
 
-	// The extension file should contain the fresh Copilot token.
+	// Extension must use oauth refresh callbacks, not a static token.
 	home := os.Getenv("HOME")
 	extPath := filepath.Join(home, ".pi", "agent", "extensions", "aictx-provider.ts")
 	data, err := os.ReadFile(extPath)
@@ -88,14 +75,18 @@ func TestSwitchContext_CopilotProvider_FetchesToken(t *testing.T) {
 		t.Fatalf("reading extension file: %v", err)
 	}
 	ext := string(data)
-	if !strings.Contains(ext, "tid=freshcopilottoken") {
-		t.Errorf("extension does not contain fresh Copilot token; got:\n%s", ext)
+	if !strings.Contains(ext, "oauth:") {
+		t.Errorf("extension missing oauth block; got:\n%s", ext)
+	}
+	if !strings.Contains(ext, "aictx copilot refresh") {
+		t.Errorf("extension should call 'aictx copilot refresh'; got:\n%s", ext)
 	}
 	if !strings.Contains(ext, `"copilot"`) {
-		t.Errorf("extension missing \"copilot\" provider name; got:\n%s", ext)
+		t.Errorf("extension missing copilot provider name; got:\n%s", ext)
 	}
-	if !strings.Contains(ext, `"openai-completions"`) {
-		t.Errorf("extension missing openai-completions api; got:\n%s", ext)
+	// Must NOT contain a hardcoded token.
+	if strings.Contains(ext, "tid=") {
+		t.Errorf("extension must not contain a hardcoded Copilot token; got:\n%s", ext)
 	}
 }
 

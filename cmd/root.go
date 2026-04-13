@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"time"
-
 	"github.com/IQNeoXen/aictx/internal/config"
 	"github.com/IQNeoXen/aictx/internal/copilot"
 	"github.com/IQNeoXen/aictx/internal/keyring"
@@ -113,26 +111,21 @@ func switchContext(cfg *config.Config, name string) error {
 		return fmt.Errorf("context %q not found. Available: %v", name, cfg.ContextNames())
 	}
 
-	// Resolve Copilot credentials before applying to targets.
+	// Resolve Copilot provider before applying to targets.
+	// No token exchange here — the pi extension handles auto-renewal via its
+	// oauth refreshToken callback (calls 'aictx copilot refresh' internally).
 	resolvedProvider := ctx.Provider
 	if ctx.Provider.ProviderType == "copilot" {
-		oauthToken, err := keyring.GetCopilotOAuth()
-		if err != nil {
+		if !keyring.IsCopilotLoggedIn() {
 			return fmt.Errorf("Copilot: not logged in. Run 'aictx copilot login' first")
 		}
-		ct, err := copilot.ExchangeToken(oauthToken)
-		if err != nil {
-			return fmt.Errorf("Copilot: failed to refresh token: %w", err)
-		}
-		fmt.Printf("  ↺ Copilot token refreshed (expires in %s)\n",
-			time.Until(ct.ExpiresAt).Round(time.Minute))
 		resolvedProvider = config.Provider{
 			Endpoint:     copilot.CopilotAPIEndpoint,
-			APIKey:       ct.Token,
 			Model:        ctx.Provider.Model,
 			SmallModel:   ctx.Provider.SmallModel,
-			ProviderType: "openai", // pi uses openai-completions api format
+			ProviderType: "openai", // tells picli to generate openai-completions models
 			Headers:      copilot.RequiredHeaders(),
+			// No APIKey — the generated extension uses oauth refresh callbacks instead.
 		}
 	}
 

@@ -212,10 +212,10 @@ func TestPiProviderName_CopilotEndpoint(t *testing.T) {
 func TestPiApply_CopilotProvider(t *testing.T) {
 	tgt := setupPi(t)
 
+	// No APIKey — Copilot extension uses oauth refresh callbacks, not a static token.
 	te := config.TargetEntry{
 		Provider: config.Provider{
 			Endpoint:     "https://api.githubcopilot.com",
-			APIKey:       "tid=copilot_api_token",
 			Model:        "gpt-4o",
 			SmallModel:   "gpt-4o-mini",
 			ProviderType: "openai",
@@ -237,13 +237,27 @@ func TestPiApply_CopilotProvider(t *testing.T) {
 	if !strings.Contains(ext, `"copilot"`) {
 		t.Errorf("extension missing \"copilot\" provider name; got:\n%s", ext)
 	}
-	// API format must be openai-completions.
-	if !strings.Contains(ext, `"openai-completions"`) {
-		t.Errorf("extension missing openai-completions api; got:\n%s", ext)
+	// Must use oauth callbacks, not a static apiKey.
+	if !strings.Contains(ext, "oauth:") {
+		t.Errorf("extension missing oauth block; got:\n%s", ext)
 	}
-	// authHeader must be present (because APIKey is set).
+	if !strings.Contains(ext, "refreshToken") {
+		t.Errorf("extension missing refreshToken callback; got:\n%s", ext)
+	}
+	if !strings.Contains(ext, "aictx copilot refresh") {
+		t.Errorf("extension should call 'aictx copilot refresh'; got:\n%s", ext)
+	}
+	// Must NOT contain a hardcoded api token.
+	if strings.Contains(ext, "tid=") {
+		t.Errorf("extension must not contain a hardcoded Copilot token; got:\n%s", ext)
+	}
+	// authHeader must be present.
 	if !strings.Contains(ext, "authHeader: true") {
 		t.Errorf("extension missing authHeader; got:\n%s", ext)
+	}
+	// API format must be openai-completions (inside the models array).
+	if !strings.Contains(ext, `"openai-completions"`) {
+		t.Errorf("extension missing openai-completions api; got:\n%s", ext)
 	}
 	// All 4 required Copilot headers must appear.
 	for _, header := range []string{
