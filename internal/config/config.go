@@ -218,7 +218,8 @@ func Save(cfg *Config) error {
 // deepCopy returns a deep copy of cfg so callers can mutate the copy freely.
 func deepCopy(cfg *Config) *Config {
 	cp := &Config{
-		State: cfg.State,
+		State:        cfg.State,
+		CopilotLogin: cfg.CopilotLogin, // value copy — safe, no nested references
 	}
 	cp.Contexts = make([]Context, len(cfg.Contexts))
 	for ci, ctx := range cfg.Contexts {

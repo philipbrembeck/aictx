@@ -18,6 +18,12 @@ Switch between API keys, endpoints, models and other settings across multiple AI
 
 Each target translates abstract provider settings into its own config format. PRs welcome!
 
+## Supported Providers
+
+- [x] **Anthropic** (direct or via proxy) — all targets
+- [x] **OpenAI-compatible** (custom endpoint) — pi CLI
+- [x] **GitHub Copilot** (OAuth Device Flow) — pi CLI only (see [GitHub Copilot](#github-copilot))
+
 ## Install
 
 ### Homebrew (macOS / Linux)
@@ -112,6 +118,9 @@ aictx
 | `aictx current`            | Print the current context name                           |
 | `aictx discover`           | Detect config from installed tools and save as a context |
 | `aictx completion <shell>` | Print a shell completion script                          |
+| `aictx copilot login`      | Authenticate with GitHub Copilot via Device Flow         |
+| `aictx copilot status`     | Show GitHub Copilot login status                         |
+| `aictx copilot logout`     | Remove stored Copilot credentials                        |
 
 ## Switching Contexts
 
@@ -290,6 +299,80 @@ API keys are stored in the OS keychain — never in plain text on disk:
 | Windows  | Windows Credential Manager |
 
 The config file (`~/.config/aictx/config.yaml`) stores only metadata: context names, endpoints, models, and options.
+
+## GitHub Copilot
+
+aictx supports **GitHub Copilot as a provider** for the pi Coding Agent CLI via a standard OAuth 2.0 Device Flow. A one-time `aictx copilot login` wizard handles authentication; every subsequent context switch automatically exchanges the stored OAuth credential for a fresh short-lived Copilot API token.
+
+> **Note:** Claude Code targets are not supported with the Copilot provider — the Copilot API uses the OpenAI-compatible format, while Claude Code requires the Anthropic API format. Only the pi CLI target is supported.
+
+### Login
+
+```bash
+aictx copilot login
+```
+
+This will:
+1. Start the GitHub Device Flow and print a URL + code to authorize
+2. Wait for you to open the URL in a browser and enter the code
+3. Verify your Copilot subscription
+4. Let you pick a default model and an optional small model
+5. Create a context named `github-copilot` (or a name you choose)
+6. Switch to the new context immediately
+
+The OAuth token is stored in your OS keychain. Only login metadata (username, login time) is written to `~/.config/aictx/config.yaml`.
+
+### Switching
+
+```bash
+aictx github-copilot
+```
+
+On each switch, aictx exchanges the stored OAuth token for a fresh 30-minute Copilot API token and writes it to the pi extension file. The output shows when the token expires:
+
+```
+  ↺ Copilot token refreshed (expires in 30m)
+  ✓ pi Coding Agent CLI
+Switched to github-copilot
+```
+
+> **Token TTL:** Copilot API tokens expire after ~30 minutes. If pi reports an auth error during a session, re-run `aictx github-copilot` to refresh the token.
+
+### Status
+
+```bash
+aictx copilot status
+```
+
+Shows the current login state, username, login time, and which contexts use the Copilot provider.
+
+### Logout
+
+```bash
+aictx copilot logout
+```
+
+Removes the OAuth token from the keychain and clears login metadata from the config. Copilot contexts remain in the config but will fail to switch until you log in again.
+
+### Config example
+
+```yaml
+copilotLogin:
+  username: philip.brembeck
+  loggedInAt: "2026-04-11T14:30:00Z"
+
+contexts:
+  - name: github-copilot
+    provider:
+      endpoint: https://api.githubcopilot.com
+      model: gpt-4o
+      smallModel: gpt-4o-mini
+      providerType: copilot   # triggers OAuth token exchange on switch
+    targets:
+      - id: pi-cli
+```
+
+The generated pi extension (`~/.pi/agent/extensions/aictx-provider.ts`) registers a `"copilot"` provider with `api: "openai-completions"` and the required Copilot API headers.
 
 ## Config
 

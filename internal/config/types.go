@@ -1,5 +1,14 @@
 package config
 
+import "time"
+
+// CopilotLogin holds persisted metadata about the Copilot login session.
+// Only non-sensitive fields are stored here; the OAuth token lives in the OS keychain.
+type CopilotLogin struct {
+	Username   string    `yaml:"username,omitempty"`
+	LoggedInAt time.Time `yaml:"loggedInAt,omitempty"`
+}
+
 // Context represents a named AI tool configuration.
 type Context struct {
 	Name          string        `yaml:"name"`
@@ -86,6 +95,7 @@ type State struct {
 
 // Config is the top-level aictx configuration.
 type Config struct {
-	State    State     `yaml:"state"`
-	Contexts []Context `yaml:"contexts"`
+	State        State        `yaml:"state"`
+	CopilotLogin CopilotLogin `yaml:"copilotLogin,omitempty"`
+	Contexts     []Context    `yaml:"contexts"`
 }

@@ -97,10 +97,23 @@ func (t *Target) providerType(te config.TargetEntry) string {
 }
 
 // piProviderName returns the name to pass to pi's registerProvider.
-// When the API type is "anthropic" but a custom endpoint is configured (i.e. a
-// proxy), we derive a unique name from the endpoint hostname so that pi does NOT
-// apply its stored Anthropic OAuth credentials to the request.
+// Special cases:
+//   - GitHub Copilot endpoint → "copilot" (must be checked first, as the
+//     ProviderType is resolved to "openai" by the time Apply() is called).
+//   - Anthropic with custom endpoint → derived from hostname so pi does NOT
+//     apply its stored Anthropic OAuth credentials to proxy requests.
 func (t *Target) piProviderName(te config.TargetEntry) string {
+	// Special case: GitHub Copilot endpoint → "copilot".
+	// This check must come first because the ProviderType is resolved to
+	// "openai" (not "copilot") by the time Apply() is called.
+	if te.Provider.Endpoint != "" {
+		if u, err := url.Parse(te.Provider.Endpoint); err == nil {
+			if strings.HasSuffix(u.Hostname(), "githubcopilot.com") {
+				return "copilot"
+			}
+		}
+	}
+
 	ptype := t.providerType(te)
 	if ptype != "anthropic" || te.Provider.Endpoint == "" {
 		return ptype

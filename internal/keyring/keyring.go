@@ -28,6 +28,35 @@ func Delete(contextName string) error {
 	return err
 }
 
+const copilotOAuthAccount = "copilot-oauth"
+
+// SetCopilotOAuth stores the GitHub OAuth token used for Copilot in the OS keychain.
+func SetCopilotOAuth(token string) error {
+	return keyring.Set(service, copilotOAuthAccount, token)
+}
+
+// GetCopilotOAuth retrieves the GitHub OAuth token for Copilot from the OS keychain.
+// Returns ("", keyring.ErrNotFound) if no token has been stored.
+func GetCopilotOAuth() (string, error) {
+	return keyring.Get(service, copilotOAuthAccount)
+}
+
+// DeleteCopilotOAuth removes the Copilot OAuth token from the OS keychain.
+// Returns nil if the entry does not exist.
+func DeleteCopilotOAuth() error {
+	err := keyring.Delete(service, copilotOAuthAccount)
+	if err == keyring.ErrNotFound {
+		return nil
+	}
+	return err
+}
+
+// IsCopilotLoggedIn returns true if a Copilot OAuth token is present in the keychain.
+func IsCopilotLoggedIn() bool {
+	_, err := GetCopilotOAuth()
+	return err == nil
+}
+
 // GetLegacy reads an API key stored under the old "contextName/targetID" account format.
 // Used only during one-time migration from the legacy per-target keyring scheme.
 func GetLegacy(contextName, targetID string) (string, error) {
