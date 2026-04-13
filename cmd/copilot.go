@@ -107,11 +107,23 @@ func copilotLoginRun(cmd *cobra.Command, args []string) error {
 		modelIDs[i] = m.ID
 	}
 
+	// Pick a sensible default: prefer Claude Sonnet, fall back to gpt-4o, then first.
+	defaultModel := modelIDs[0]
+	for _, prefer := range []string{"claude-sonnet-4-6", "claude-sonnet-4-5", "claude-3.7-sonnet", "gpt-4o"} {
+		for _, id := range modelIDs {
+			if id == prefer {
+				defaultModel = id
+				goto foundDefault
+			}
+		}
+	}
+foundDefault:
+
 	// Model selection.
 	var selectedModel string
 	if picker.IsTerminal() {
 		fmt.Println("Select default model:")
-		selected, err := picker.Pick(modelIDs, "gpt-4o")
+		selected, err := picker.Pick(modelIDs, defaultModel)
 		if err != nil {
 			return err
 		}
@@ -121,13 +133,13 @@ func copilotLoginRun(cmd *cobra.Command, args []string) error {
 		}
 		selectedModel = selected
 	} else {
-		fmt.Printf("Select default model (available: %s) [gpt-4o]: ", strings.Join(modelIDs, ", "))
+		fmt.Printf("Select default model (available: %s) [%s]: ", strings.Join(modelIDs, ", "), defaultModel)
 		scanner := bufio.NewScanner(os.Stdin)
 		if scanner.Scan() {
 			selectedModel = strings.TrimSpace(scanner.Text())
 		}
 		if selectedModel == "" {
-			selectedModel = "gpt-4o"
+			selectedModel = defaultModel
 		}
 	}
 
@@ -163,76 +175,14 @@ func copilotLoginRun(cmd *cobra.Command, args []string) error {
 		ctxName = defaultCtxName
 	}
 
-	// Target selection.
-	allTargets := target.All()
-	labels := make([]string, len(allTargets))
-	initialSelected := make([]bool, len(allTargets))
-	for i, t := range allTargets {
-		lbl := fmt.Sprintf("%s (%s)", t.Name(), t.ID())
-		if t.ID() == picli.ID {
-			if t.Detect() {
-				lbl += " [detected]"
-				initialSelected[i] = true
-			}
-		} else {
-			lbl += " (Copilot not yet supported)"
-			initialSelected[i] = false
-		}
-		labels[i] = lbl
+	// Copilot only supports pi-cli (OpenAI-compatible API).
+	// Auto-select it; no picker needed.
+	piTarget := target.ByID(picli.ID)
+	if piTarget == nil || !piTarget.Detect() {
+		return fmt.Errorf("pi Coding Agent CLI not found — install pi first (https://github.com/mariozechner/pi)")
 	}
-
-	var selectedTargets []string
-	fmt.Println("Select targets:")
-	if picker.IsTerminal() {
-		result, err := picker.PickMulti(labels, initialSelected)
-		if err != nil {
-			return err
-		}
-		if result == nil {
-			fmt.Println("Aborted.")
-			return nil
-		}
-		for i, sel := range result {
-			if sel {
-				selectedTargets = append(selectedTargets, allTargets[i].ID())
-			}
-		}
-	} else {
-		for i, lbl := range labels {
-			checked := " "
-			if initialSelected[i] {
-				checked = "x"
-			}
-			fmt.Printf("  [%s] %d. %s\n", checked, i+1, lbl)
-		}
-		fmt.Print("Select targets (comma-separated numbers, e.g. 1): ")
-		lineSc := bufio.NewScanner(os.Stdin)
-		if lineSc.Scan() {
-			for _, p := range strings.Split(lineSc.Text(), ",") {
-				p = strings.TrimSpace(p)
-				if p == "" {
-					continue
-				}
-				idx := 0
-				fmt.Sscanf(p, "%d", &idx)
-				if idx >= 1 && idx <= len(allTargets) {
-					selectedTargets = append(selectedTargets, allTargets[idx-1].ID())
-				}
-			}
-		}
-		if len(selectedTargets) == 0 {
-			// Default to pi-cli if detected.
-			for i, t := range allTargets {
-				if t.ID() == picli.ID && initialSelected[i] {
-					selectedTargets = append(selectedTargets, picli.ID)
-				}
-			}
-		}
-	}
-
-	if len(selectedTargets) == 0 {
-		return fmt.Errorf("no targets selected")
-	}
+	selectedTargets := []string{picli.ID}
+	fmt.Printf("  ✓ %s (auto-selected, only supported target)\n", piTarget.Name())
 
 	// Build context.
 	ctx := config.Context{
