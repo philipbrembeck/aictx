@@ -17,6 +17,7 @@ type Context struct {
 	Provider      Provider      `yaml:"provider,omitempty"`
 	Options       Options       `yaml:"options,omitempty"`
 	HasKeyringKey bool          `yaml:"hasKeyringKey,omitempty"`
+	HasOAuthKey   bool          `yaml:"hasOAuthKey,omitempty"`
 	Targets       []TargetEntry `yaml:"targets"`
 }
 
@@ -37,6 +38,7 @@ type DiscoveryResult struct {
 	ID       string
 	Provider Provider
 	Env      map[string]string
+	IsOAuth  bool
 }
 
 // Provider holds abstract connection settings that each target translates

@@ -6,6 +6,46 @@ import (
 	zalkeyring "github.com/zalando/go-keyring"
 )
 
+func TestKeyring_OAuth(t *testing.T) {
+	zalkeyring.MockInit()
+
+	const ctx = "work"
+	const creds = `{"accessToken":"sk-ant-test","refreshToken":"rt-test","expiresAt":9999999999}`
+
+	// Get on missing key returns error.
+	_, err := GetOAuth(ctx)
+	if err == nil {
+		t.Error("GetOAuth() expected error when not set")
+	}
+
+	// Set then Get round-trip.
+	if err := SetOAuth(ctx, creds); err != nil {
+		t.Fatalf("SetOAuth() error: %v", err)
+	}
+
+	got, err := GetOAuth(ctx)
+	if err != nil {
+		t.Fatalf("GetOAuth() error: %v", err)
+	}
+	if got != creds {
+		t.Errorf("GetOAuth() = %q, want %q", got, creds)
+	}
+
+	// Delete clears the entry.
+	if err := DeleteOAuth(ctx); err != nil {
+		t.Fatalf("DeleteOAuth() error: %v", err)
+	}
+	_, err = GetOAuth(ctx)
+	if err == nil {
+		t.Error("GetOAuth() expected error after delete")
+	}
+
+	// Delete on missing is no-op.
+	if err := DeleteOAuth(ctx); err != nil {
+		t.Errorf("DeleteOAuth() on missing error: %v", err)
+	}
+}
+
 func TestKeyring_CopilotOAuth(t *testing.T) {
 	zalkeyring.MockInit()
 
