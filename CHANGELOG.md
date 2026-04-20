@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.1.2 (2026-04-20)
+
+### Added
+
+- **OAuth / Anthropic account context switching** — manage multiple Claude accounts alongside API-key contexts
+  - `aictx add --oauth <name>` — captures the active Claude session's OAuth credentials from the macOS Keychain (or `.credentials.json` on Linux/Windows) and the `oauthAccount` metadata from `~/.claude.json`; stores everything in the aictx keyring
+  - On context switch, writes the stored OAuth credentials back to Claude's native Keychain entries (all matching entries) and `.credentials.json`, and restores `oauthAccount` in `~/.claude.json` so `/config` shows the correct account
+  - Switching away from an OAuth context cleanly removes credentials; switching to an OAuth context from a non-OAuth one won't accidentally delete the user's native session
+  - `aictx discover` detects active OAuth sessions and captures credentials automatically
+  - `aictx copy` and `aictx rename` migrate OAuth credentials to the new context name
+  - `aictx rm` cleans up the OAuth keyring entry
+  - Cross-platform: macOS uses the `security` CLI for Keychain access; Linux/Windows fall back to `.credentials.json`
+- `HasOAuthKey` field added to `Context` in `config.yaml`
+- `IsOAuth` field added to `DiscoveryResult`
+- New `internal/claudeauth` package with platform-specific `Read`, `Write`, `Remove` and shared `ReadAccountMeta` / `WriteAccountMeta` helpers
+- New keyring helpers: `SetOAuth`, `GetOAuth`, `DeleteOAuth`, `SetOAuthMeta`, `GetOAuthMeta`, `DeleteOAuthMeta`
+
 ## v0.1.1 (2026-04-11)
 
 ### Added
