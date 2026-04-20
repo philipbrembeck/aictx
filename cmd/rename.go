@@ -36,6 +36,7 @@ var renameCmd = &cobra.Command{
 		}
 
 		hasKeyring := ctx.HasKeyringKey
+		hasOAuth := ctx.HasOAuthKey
 
 		cfg.RenameContext(oldName, newName)
 
@@ -49,6 +50,24 @@ var renameCmd = &cobra.Command{
 		if hasKeyring {
 			if kerr := keyring.Delete(oldName); kerr != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "aictx: warning: could not delete old keychain entry for %s: %v\n", oldName, kerr)
+			}
+		}
+
+		// Migrate OAuth credentials to the new name.
+		if hasOAuth {
+			creds, err := keyring.GetOAuth(oldName)
+			if err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "aictx: warning: could not read OAuth credentials for rename: %v\n", err)
+			} else {
+				if err := keyring.SetOAuth(newName, creds); err != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), "aictx: warning: could not store OAuth credentials under new name: %v\n", err)
+				} else {
+					_ = keyring.DeleteOAuth(oldName)
+				}
+			}
+			if meta, err := keyring.GetOAuthMeta(oldName); err == nil {
+				_ = keyring.SetOAuthMeta(newName, meta)
+				_ = keyring.DeleteOAuthMeta(oldName)
 			}
 		}
 

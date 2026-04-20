@@ -6,7 +6,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/IQNeoXen/aictx/internal/claudeauth"
 	"github.com/IQNeoXen/aictx/internal/config"
+	"github.com/IQNeoXen/aictx/internal/keyring"
 	"github.com/IQNeoXen/aictx/internal/picker"
 	"github.com/IQNeoXen/aictx/internal/target"
 	"github.com/spf13/cobra"
@@ -25,6 +27,7 @@ var (
 	addNoBetas     bool
 	addEnv         []string
 	addHeaders     []string
+	addOAuth       bool
 )
 
 var addCmd = &cobra.Command{
@@ -47,6 +50,7 @@ func init() {
 	addCmd.Flags().BoolVar(&addNoBetas, "no-betas", false, "Disable experimental betas")
 	addCmd.Flags().StringArrayVar(&addEnv, "env", nil, "Extra environment variable as KEY=VALUE (repeatable)")
 	addCmd.Flags().StringArrayVar(&addHeaders, "header", nil, "Custom HTTP header as Key:Value (repeatable)")
+	addCmd.Flags().BoolVar(&addOAuth, "oauth", false, "Capture current Claude OAuth session as credentials")
 }
 
 func addRun(cmd *cobra.Command, args []string) error {
@@ -55,6 +59,10 @@ func addRun(cmd *cobra.Command, args []string) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
+	}
+
+	if addOAuth {
+		return addOAuthRun(cfg, name)
 	}
 
 	if cfg.FindContext(name) != nil {
@@ -274,4 +282,137 @@ func yesNo(scanner *bufio.Scanner, question string, defaultYes bool) bool {
 		return answer == "y" || answer == "yes"
 	}
 	return defaultYes
+}
+
+func addOAuthRun(cfg *config.Config, name string) error {
+	existing := cfg.FindContext(name)
+
+	if existing != nil {
+		if existing.HasKeyringKey {
+			return fmt.Errorf("context %q already uses an API key. Remove it first or create a new context", name)
+		}
+		if existing.HasOAuthKey {
+			fmt.Printf("Context %q already has OAuth credentials. Overwrite? (y/N): ", name)
+			scanner := bufio.NewScanner(os.Stdin)
+			if !scanner.Scan() || strings.ToLower(strings.TrimSpace(scanner.Text())) != "y" {
+				fmt.Println("Cancelled.")
+				return nil
+			}
+		}
+	}
+
+	// Read current Claude OAuth credentials.
+	creds, err := claudeauth.Read()
+	if err != nil {
+		return fmt.Errorf("no active Claude OAuth session found. Run 'claude login' first")
+	}
+
+	// Store in aictx keyring.
+	if err := keyring.SetOAuth(name, creds); err != nil {
+		return fmt.Errorf("storing OAuth credentials in keychain: %w", err)
+	}
+
+	// Capture account metadata from ~/.claude.json.
+	if meta, err := claudeauth.ReadAccountMeta(); err == nil {
+		if err := keyring.SetOAuthMeta(name, meta); err != nil {
+			fmt.Fprintf(os.Stderr, "  ⚠ could not store account metadata: %v\n", err)
+		}
+	}
+
+	if existing != nil {
+		// Attach to existing context.
+		existing.HasOAuthKey = true
+		if err := config.Save(cfg); err != nil {
+			return err
+		}
+		fmt.Printf("✓ OAuth credentials captured for context \033[1m%s\033[0m\n", name)
+		return nil
+	}
+
+	// New context: build it with target selection.
+	ctx := config.Context{
+		Name:        name,
+		HasOAuthKey: true,
+	}
+
+	// Apply model flags if provided.
+	if addModel != "" {
+		ctx.Provider.Model = addModel
+	}
+	if addSmallModel != "" {
+		ctx.Provider.SmallModel = addSmallModel
+	}
+
+	// Target selection (reuse existing interactive logic).
+	if len(addTargets) > 0 {
+		for _, tid := range addTargets {
+			if target.ByID(tid) == nil {
+				return fmt.Errorf("unknown target %q. Available: %v", tid, target.IDs())
+			}
+			ctx.Targets = append(ctx.Targets, config.TargetEntry{ID: tid})
+		}
+	} else {
+		// Interactive target selection.
+		fmt.Println("\nSelect targets:")
+		allTargets := target.All()
+		labels := make([]string, len(allTargets))
+		initialSelected := make([]bool, len(allTargets))
+		for i, t := range allTargets {
+			lbl := fmt.Sprintf("%s (%s)", t.Name(), t.ID())
+			if t.Detect() {
+				lbl += " [detected]"
+				initialSelected[i] = true
+			}
+			labels[i] = lbl
+		}
+
+		if picker.IsTerminal() {
+			result, err := picker.PickMulti(labels, initialSelected)
+			if err != nil {
+				return err
+			}
+			if result != nil {
+				for i, sel := range result {
+					if sel {
+						ctx.Targets = append(ctx.Targets, config.TargetEntry{ID: allTargets[i].ID()})
+					}
+				}
+			}
+		} else {
+			for i, lbl := range labels {
+				checked := " "
+				if initialSelected[i] {
+					checked = "x"
+				}
+				fmt.Printf("  [%s] %d. %s\n", checked, i+1, lbl)
+			}
+			fmt.Print("Select targets (comma-separated numbers): ")
+			scanner := bufio.NewScanner(os.Stdin)
+			if scanner.Scan() {
+				for _, p := range strings.Split(scanner.Text(), ",") {
+					p = strings.TrimSpace(p)
+					if p == "" {
+						continue
+					}
+					idx := 0
+					fmt.Sscanf(p, "%d", &idx)
+					if idx >= 1 && idx <= len(allTargets) {
+						ctx.Targets = append(ctx.Targets, config.TargetEntry{ID: allTargets[idx-1].ID()})
+					}
+				}
+			}
+		}
+
+		if len(ctx.Targets) == 0 {
+			return fmt.Errorf("no targets selected")
+		}
+	}
+
+	cfg.Contexts = append(cfg.Contexts, ctx)
+	if err := config.Save(cfg); err != nil {
+		return err
+	}
+
+	fmt.Printf("✓ Context \033[1m%s\033[0m created (OAuth, %d targets)\n", name, len(ctx.Targets))
+	return nil
 }

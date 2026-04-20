@@ -33,6 +33,12 @@ var rmCmd = &cobra.Command{
 				fmt.Fprintf(cmd.ErrOrStderr(), "aictx: warning: could not delete keychain entry for %s: %v\n", name, kerr)
 			}
 		}
+		if ctx.HasOAuthKey {
+			if kerr := keyring.DeleteOAuth(name); kerr != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "aictx: warning: could not remove OAuth credentials from keychain: %v\n", kerr)
+			}
+			_ = keyring.DeleteOAuthMeta(name)
+		}
 
 		cfg.RemoveContext(name)
 

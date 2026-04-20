@@ -6,7 +6,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/IQNeoXen/aictx/internal/claudeauth"
 	"github.com/IQNeoXen/aictx/internal/config"
+	"github.com/IQNeoXen/aictx/internal/keyring"
 	"github.com/IQNeoXen/aictx/internal/target"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -66,6 +68,24 @@ func discoverRun(cmd *cobra.Command, args []string) error {
 		})
 	}
 
+	// Check if any result indicates an OAuth session.
+	var oauthCreds string
+	for _, dr := range results {
+		if dr.IsOAuth {
+			ctx.HasOAuthKey = true
+			break
+		}
+	}
+	if ctx.HasOAuthKey {
+		creds, err := claudeauth.Read()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "aictx: warning: OAuth detected but could not read credentials: %v\n", err)
+			ctx.HasOAuthKey = false
+		} else {
+			oauthCreds = creds
+		}
+	}
+
 	// Warn if multiple targets returned differing non-empty providers.
 	var nonEmptyProviders []config.Provider
 	for _, dr := range results {
@@ -106,6 +126,14 @@ func discoverRun(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx.Name = name
+
+	// Store OAuth credentials in keyring now that we have the context name.
+	if ctx.HasOAuthKey && oauthCreds != "" {
+		if err := keyring.SetOAuth(name, oauthCreds); err != nil {
+			fmt.Fprintf(os.Stderr, "aictx: warning: could not store OAuth credentials: %v\n", err)
+			ctx.HasOAuthKey = false
+		}
+	}
 
 	cfg, err := config.Load()
 	if err != nil {

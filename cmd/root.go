@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"github.com/IQNeoXen/aictx/internal/claudeauth"
 	"github.com/IQNeoXen/aictx/internal/config"
 	"github.com/IQNeoXen/aictx/internal/copilot"
 	"github.com/IQNeoXen/aictx/internal/keyring"
@@ -126,6 +127,29 @@ func switchContext(cfg *config.Config, name string) error {
 			ProviderType: "openai", // tells picli to generate openai-completions models
 			Headers:      copilot.RequiredHeaders(),
 			// No APIKey — the generated extension uses oauth refresh callbacks instead.
+		}
+	}
+
+	// Handle OAuth context: write/remove credentials from Claude's native storage.
+	if ctx.HasOAuthKey {
+		oauthCreds, err := keyring.GetOAuth(ctx.Name)
+		if err != nil {
+			return fmt.Errorf("OAuth credentials not found in keychain for %q. Re-run 'aictx add %s --oauth' to recapture", name, name)
+		}
+		if err := claudeauth.Write(oauthCreds); err != nil {
+			return fmt.Errorf("writing OAuth credentials: %w", err)
+		}
+		// Restore account metadata to ~/.claude.json.
+		if meta, err := keyring.GetOAuthMeta(ctx.Name); err == nil {
+			if err := claudeauth.WriteAccountMeta(meta); err != nil {
+				fmt.Fprintf(os.Stderr, "  ⚠ could not restore account metadata: %v\n", err)
+			}
+		}
+	} else if prev := cfg.FindContext(cfg.State.Current); prev != nil && prev.HasOAuthKey {
+		// Only remove OAuth credentials when switching AWAY from an OAuth context,
+		// not unconditionally — we must not delete the user's native Claude session.
+		if err := claudeauth.Remove(); err != nil {
+			fmt.Fprintf(os.Stderr, "  ⚠ could not remove existing OAuth credentials: %v\n", err)
 		}
 	}
 
