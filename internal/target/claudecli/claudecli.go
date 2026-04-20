@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 
+	"github.com/IQNeoXen/aictx/internal/claudeauth"
 	"github.com/IQNeoXen/aictx/internal/config"
 )
 
@@ -143,7 +144,10 @@ func (t *Target) Discover() (*config.DiscoveryResult, error) {
 	data, err := os.ReadFile(t.settingsPath())
 	if err != nil {
 		if os.IsNotExist(err) {
-			// No settings.json but target is detected (OAuth mode)
+			// No settings.json — check for OAuth credentials.
+			if claudeauth.Exists() {
+				return &config.DiscoveryResult{ID: ID, IsOAuth: true}, nil
+			}
 			return &config.DiscoveryResult{ID: ID}, nil
 		}
 		return nil, fmt.Errorf("reading claude settings: %w", err)
@@ -155,6 +159,11 @@ func (t *Target) Discover() (*config.DiscoveryResult, error) {
 	}
 
 	dr := &config.DiscoveryResult{ID: ID}
+
+	// Check for OAuth credentials even when settings.json exists.
+	if claudeauth.Exists() {
+		dr.IsOAuth = true
+	}
 
 	if envRaw, ok := raw["env"].(map[string]interface{}); ok {
 		for k, v := range envRaw {
