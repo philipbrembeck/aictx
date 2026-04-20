@@ -228,6 +228,7 @@ func deepCopy(cfg *Config) *Config {
 			Description:   ctx.Description,
 			Command:       ctx.Command,
 			HasKeyringKey: ctx.HasKeyringKey,
+			HasOAuthKey:   ctx.HasOAuthKey,
 			Options:       ctx.Options,
 			Provider: Provider{
 				Endpoint:     ctx.Provider.Endpoint,
