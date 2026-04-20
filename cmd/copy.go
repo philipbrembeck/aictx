@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/IQNeoXen/aictx/internal/config"
+	"github.com/IQNeoXen/aictx/internal/keyring"
 	"github.com/IQNeoXen/aictx/internal/target"
 	"github.com/spf13/cobra"
 )
@@ -163,6 +164,18 @@ func copyRun(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Copy OAuth credentials if source has them.
+	if src.HasOAuthKey {
+		creds, err := keyring.GetOAuth(src.Name)
+		if err != nil {
+			return fmt.Errorf("reading OAuth credentials for %q: %w", src.Name, err)
+		}
+		if err := keyring.SetOAuth(dstName, creds); err != nil {
+			return fmt.Errorf("storing OAuth credentials for %q: %w", dstName, err)
+		}
+		dst.HasOAuthKey = true
+	}
+
 	cfg.Contexts = append(cfg.Contexts, dst)
 	if err := config.Save(cfg); err != nil {
 		return err
@@ -178,6 +191,7 @@ func deepCopyContext(src config.Context) config.Context {
 		Description:   src.Description,
 		Command:       src.Command,
 		HasKeyringKey: src.HasKeyringKey,
+		HasOAuthKey:   src.HasOAuthKey,
 		Options:       src.Options,
 		Provider: config.Provider{
 			Endpoint:     src.Provider.Endpoint,
