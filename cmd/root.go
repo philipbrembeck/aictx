@@ -139,8 +139,9 @@ func switchContext(cfg *config.Config, name string) error {
 		if err := claudeauth.Write(oauthCreds); err != nil {
 			return fmt.Errorf("writing OAuth credentials: %w", err)
 		}
-	} else {
-		// Switching to non-OAuth context: remove any existing OAuth credentials (clean slate).
+	} else if prev := cfg.FindContext(cfg.State.Current); prev != nil && prev.HasOAuthKey {
+		// Only remove OAuth credentials when switching AWAY from an OAuth context,
+		// not unconditionally — we must not delete the user's native Claude session.
 		if err := claudeauth.Remove(); err != nil {
 			fmt.Fprintf(os.Stderr, "  ⚠ could not remove existing OAuth credentials: %v\n", err)
 		}
