@@ -139,6 +139,12 @@ func switchContext(cfg *config.Config, name string) error {
 		if err := claudeauth.Write(oauthCreds); err != nil {
 			return fmt.Errorf("writing OAuth credentials: %w", err)
 		}
+		// Restore account metadata to ~/.claude.json.
+		if meta, err := keyring.GetOAuthMeta(ctx.Name); err == nil {
+			if err := claudeauth.WriteAccountMeta(meta); err != nil {
+				fmt.Fprintf(os.Stderr, "  ⚠ could not restore account metadata: %v\n", err)
+			}
+		}
 	} else if prev := cfg.FindContext(cfg.State.Current); prev != nil && prev.HasOAuthKey {
 		// Only remove OAuth credentials when switching AWAY from an OAuth context,
 		// not unconditionally — we must not delete the user's native Claude session.

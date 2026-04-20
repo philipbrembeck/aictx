@@ -50,6 +50,27 @@ func DeleteOAuth(contextName string) error {
 	return err
 }
 
+const oauthMetaPrefix = "claude-oauth-meta-"
+
+// SetOAuthMeta stores Claude account metadata for the given context in the OS keychain.
+func SetOAuthMeta(contextName, meta string) error {
+	return keyring.Set(service, oauthMetaPrefix+contextName, meta)
+}
+
+// GetOAuthMeta retrieves Claude account metadata for the given context from the OS keychain.
+func GetOAuthMeta(contextName string) (string, error) {
+	return keyring.Get(service, oauthMetaPrefix+contextName)
+}
+
+// DeleteOAuthMeta removes Claude account metadata for the given context from the OS keychain.
+func DeleteOAuthMeta(contextName string) error {
+	err := keyring.Delete(service, oauthMetaPrefix+contextName)
+	if err == keyring.ErrNotFound {
+		return nil
+	}
+	return err
+}
+
 const copilotOAuthAccount = "copilot-oauth"
 
 // SetCopilotOAuth stores the GitHub OAuth token used for Copilot in the OS keychain.

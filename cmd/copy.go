@@ -173,6 +173,9 @@ func copyRun(cmd *cobra.Command, args []string) error {
 		if err := keyring.SetOAuth(dstName, creds); err != nil {
 			return fmt.Errorf("storing OAuth credentials for %q: %w", dstName, err)
 		}
+		if meta, err := keyring.GetOAuthMeta(src.Name); err == nil {
+			_ = keyring.SetOAuthMeta(dstName, meta)
+		}
 		dst.HasOAuthKey = true
 	}
 

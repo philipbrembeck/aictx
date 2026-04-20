@@ -312,6 +312,13 @@ func addOAuthRun(cfg *config.Config, name string) error {
 		return fmt.Errorf("storing OAuth credentials in keychain: %w", err)
 	}
 
+	// Capture account metadata from ~/.claude.json.
+	if meta, err := claudeauth.ReadAccountMeta(); err == nil {
+		if err := keyring.SetOAuthMeta(name, meta); err != nil {
+			fmt.Fprintf(os.Stderr, "  ⚠ could not store account metadata: %v\n", err)
+		}
+	}
+
 	if existing != nil {
 		// Attach to existing context.
 		existing.HasOAuthKey = true

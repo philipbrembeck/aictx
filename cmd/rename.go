@@ -65,6 +65,10 @@ var renameCmd = &cobra.Command{
 					_ = keyring.DeleteOAuth(oldName)
 				}
 			}
+			if meta, err := keyring.GetOAuthMeta(oldName); err == nil {
+				_ = keyring.SetOAuthMeta(newName, meta)
+				_ = keyring.DeleteOAuthMeta(oldName)
+			}
 		}
 
 		fmt.Printf("Context \033[1m%s\033[0m renamed to \033[1m%s\033[0m.\n", oldName, newName)
