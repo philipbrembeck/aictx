@@ -8,13 +8,20 @@ import (
 )
 
 // Write writes Claude OAuth credentials to the macOS Keychain.
+// It discovers the account name Claude Code uses and replaces the same entry.
 func Write(credentials string) error {
-	// Delete existing entry first (add-generic-password -U can be unreliable).
-	exec.Command("security", "delete-generic-password", "-s", keychainService).Run()
+	acct := keychainAccount()
+	if acct == "" {
+		// No existing entry — use the service name as default account.
+		acct = keychainService
+	}
+
+	// Delete existing entry using the discovered account.
+	exec.Command("security", "delete-generic-password", "-s", keychainService, "-a", acct).Run()
 
 	cmd := exec.Command("security", "add-generic-password",
 		"-s", keychainService,
-		"-a", keychainService,
+		"-a", acct,
 		"-w", credentials,
 	)
 	if out, err := cmd.CombinedOutput(); err != nil {
