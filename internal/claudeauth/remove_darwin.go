@@ -4,13 +4,13 @@ package claudeauth
 
 import "os/exec"
 
-// Remove deletes Claude OAuth credentials from the macOS Keychain.
-// Returns nil if entry doesn't exist.
+// Remove deletes Claude OAuth credentials from both the macOS Keychain
+// and .credentials.json.
 func Remove() error {
 	acct := keychainAccount()
-	if acct == "" {
-		return nil // no entry to remove
+	if acct != "" {
+		_ = exec.Command("security", "delete-generic-password", "-s", keychainService, "-a", acct).Run()
 	}
-	_ = exec.Command("security", "delete-generic-password", "-s", keychainService, "-a", acct).Run()
+	_ = removeFile()
 	return nil
 }
